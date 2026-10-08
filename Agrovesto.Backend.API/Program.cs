@@ -355,6 +355,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders =
         ForwardedHeaders.XForwardedFor |
         ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();   // trusts the header from any caller; fine only if the app isn't reachable
+    options.KnownProxies.Clear();
 
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();

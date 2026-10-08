@@ -35,6 +35,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<InviteResult> ResendAsync(string userId, string invitedByUserId, CancellationToken ct);
         Task<AcceptResult> AcceptAsync(AcceptInviteRequest req, CancellationToken ct);   // new
         Task<AccessResult<AdminUserStatusDto>> DeactivateUserAsync(string userId, string actingUserId, CancellationToken ct);
+        Task<AccessResult<AdminUserDetailDto>> GetUserDetailAsync(string adminId, string actingUserId, CancellationToken ct);
+        Task<AccessResult<AdminUserAccessDto>> GetUserAccessAsync(string adminId, string actingUserId, CancellationToken ct);
+        Task<AccessResult<Core.Models.Admin.PagedResult<AdminActivityDto>>> GetUserActivityAsync(string adminId, string actingUserId, int page, int pageSize, CancellationToken ct);
+        Task<AccessResult<Core.Models.Admin.PagedResult<AdminLoginHistoryDto>>> GetUserLoginHistoryAsync(string adminId, string actingUserId, int page, int pageSize, CancellationToken ct);
+        Task<AccessResult<AdminUserDetailDto>> UpdateUserAsync(string userId, UpdateAdminUserRequest req, string actingUserId, CancellationToken ct);
     }
     public class AdminUserManagementManager : IAdminUserManagementManager
     {
@@ -45,16 +50,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         private readonly IAWSService _email;              // your existing email abstraction
         private readonly AdminPanelOptions _opts;
         private readonly ILogger<AdminUserManagementManager> _log;
+        private readonly IAdminAuditLogger _audit;
         public AdminUserManagementManager(IConfiguration configuration,
             IPermissionCacheInvalidator cache,
             DataContext db, UserManager<User> users, 
             IAWSService email, IOptions<AdminPanelOptions> opts, 
-            ILogger<AdminUserManagementManager> log)
+            ILogger<AdminUserManagementManager> log, IAdminAuditLogger audit)
         {
             _configuration = configuration;
             _db = db;
             _users = users;
             _email = email;
+            _audit = audit;
             _opts = opts.Value;
             _log = log;
             _cache = cache;
@@ -348,7 +355,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             });
 
             if (failure is not null) return failure;
+            await _audit.LogAsync(
+                "UserInvited", 
+                invitedByUserId, 
+                user!.Id,
+                $"Invited user to login as Role: {role.Name}",
+                AdminActiviLogModule.AdminPanel.UserMgt,
+                 $"{email}"
 
+                );   // here
             // Send after commit so a mail outage never leaves a half-created user
             var sent = await TrySendInviteAsync(user!, rawToken, expires);
 
@@ -371,6 +386,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             invite.ExpiresAt = invite.SentAt.AddDays(_opts.InviteExpiryDays);
             invite.InvitedByUserId = invitedByUserId;
             await _db.SaveChangesAsync(ct);
+
+            await _audit.LogAsync("InviteResent", invitedByUserId, user.Id, "Resent login invite",AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
+
 
             var sent = await TrySendInviteAsync(user, rawToken, invite.ExpiresAt);
             return new(new InviteAdminUserResponse(user.Id, user.AdminCode!, "Pending", sent, invite.ExpiresAt), null, 200);
@@ -457,6 +475,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 await _db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
 
+                await _audit.LogAsync("InviteAccepted", user.Id, user.Id, "Accepted login invite", AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                                // here
+
                 return new AcceptResult(true, null, 200);
             });
         }
@@ -503,6 +523,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             user.ModifiedBy = actingUserId;
             await _db.SaveChangesAsync(ct);
 
+            await _audit.LogAsync("UserDeactivated", actingUserId, user.Id, "Deactivated user account", AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
+
+
             await _users.UpdateSecurityStampAsync(user);    // invalidates anything keyed on the security stamp
             _cache.InvalidateAll();                         // permission checks stop working immediately
 
@@ -520,6 +543,339 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             _log.LogInformation("Admin user {adminId} deactivated by {ActingUserId}", adminId, actingUserId);
 
             return AccessResult.Ok(new AdminUserStatusDto(user.Id, user.Status!.Value.ToString()));
+        }
+
+        public async Task<AccessResult<AdminUserDetailDto>> GetUserDetailAsync(string adminId, string actingUserId, CancellationToken ct)
+        {
+            var u = await _db.Users.AsNoTracking()
+                .Where(x => x.AdminCode == adminId && x.IsAdminUser)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.AdminCode,
+                    x.FirstName,
+                    x.MiddleName,
+                    x.LastName,
+                    x.Email,
+                    x.PhoneNumber,
+                    x.Department,
+                    x.Status,
+                    x.IsActive,
+                    x.CreatedOn,
+                    x.CreatedBy,
+                    x.DateModified,
+                    x.LastLoginDate
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (u is null) return AccessResult.Fail<AdminUserDetailDto>(404, "User not found.");
+
+            var roleRows = await (from ur in _db.UserRoles.AsNoTracking()
+                                  join r in _db.Roles on ur.RoleId equals r.Id
+                                  where ur.UserId == u.Id  && ur.IsActive
+                                  select new { r.Id, Name = r.Name! }).Distinct().OrderBy(r => r.Name).ToListAsync(ct);
+            var roles = roleRows.Select(r => r.Name).ToList();
+
+
+            var invite = await _db.AdminInvitations.AsNoTracking()
+                .Where(i => i.UserId == u.Id)
+                .OrderByDescending(i => i.SentAt)
+                .Select(i => new { i.InvitedByUserId, i.AcceptedAt })
+                .FirstOrDefaultAsync(ct);
+
+            // Resolve "created by" and "invited by" ids to names in one query
+            var ids = new[] { u.CreatedBy, invite?.InvitedByUserId }
+                .Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+
+            var people = await _db.Users.AsNoTracking()
+                .Where(x => ids.Contains(x.Id))
+                .Select(x => new { x.Id, x.FirstName, x.MiddleName, x.LastName, x.Name })
+                .ToListAsync(ct);
+
+            string? NameOf(string? id)
+            {
+                var p = people.FirstOrDefault(x => x.Id == id);
+                if (p is null) return null;
+                var n = JoinName(p.FirstName, p.MiddleName, p.LastName);
+                return string.IsNullOrWhiteSpace(n) ? p.Name : n;
+            }
+
+            // Legacy admin rows may predate the Status column
+            var status = u.Status ?? (u.IsActive ? AdminUserStatus.Active : AdminUserStatus.Deactivated);
+
+            await _audit.LogAsync("UserDetailViewed", actingUserId, u.Id, "Viewed user details", AdminActiviLogModule.AdminPanel.UserMgt, $"{u.Email}", ct);                          // here
+
+            var dto = new AdminUserDetailDto(
+                u.Id, u.AdminCode ?? "",
+                JoinName(u.FirstName, u.MiddleName, u.LastName), u.FirstName ?? "", u.MiddleName, u.LastName ?? "",
+                status.ToString(), u.Department, roles,
+                u.Email ?? "", u.PhoneNumber, 
+                //FormatPhoneDisplay(u.PhoneNumber),
+                u.CreatedOn, NameOf(u.CreatedBy) ?? "System", u.DateModified, u.LastLoginDate,
+                invite is null ? "Direct" : "Invitation",
+                NameOf(invite?.InvitedByUserId),
+                invite?.AcceptedAt,
+                ActionsFor(status, isSelf: u.Id == actingUserId),
+                roleRows.FirstOrDefault()?.Id);
+
+            return AccessResult.Ok(dto);
+        }
+
+        private static string JoinName(params string?[] parts) =>
+            string.Join(" ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+
+        // +234 803 456 7891 for display; storage stays 08034567891
+        private static string? FormatPhoneDisplay(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return null;
+            var d = new string(phone.Where(char.IsDigit).ToArray());
+            if (d.StartsWith("234")) d = d[3..];
+            if (d.StartsWith("0")) d = d[1..];
+            return d.Length == 10 ? $"+234 {d[..3]} {d[3..6]} {d[6..]}" : phone;
+        }
+
+        private static List<string> ActionsFor(AdminUserStatus s, bool isSelf) => s switch
+        {
+            AdminUserStatus.Active => isSelf ? new() { "Edit" } : new() { "Edit", "Deactivate" },
+            AdminUserStatus.Suspended => new() { "Edit", "Activate", "Deactivate" },
+            AdminUserStatus.Pending => new() { "ResendInvite", "RevokeInvite" },
+            _ => new() { "Activate" }
+        };
+
+        public async Task<AccessResult<AdminUserAccessDto>> GetUserAccessAsync(string adminId, string actingUserId, CancellationToken ct)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.AdminCode == adminId && u.IsAdminUser, ct);
+
+            if (user is null)
+                return AccessResult.Fail<AdminUserAccessDto>(404, "User not found.");
+
+            var rows = await (from ur in _db.UserRoles.AsNoTracking()
+                              join r in _db.Roles on ur.RoleId equals r.Id
+                              where ur.UserId == user.Id && ur.IsActive
+                              select new
+                              {
+                                  r.Id,
+                                  r.Name,
+                                  r.Descriptions,
+                                  Perms = r.RolePermissions.Select(rp => new
+                                  {
+                                      rp.Permission.Name,
+                                      rp.Permission.Group,
+                                      rp.Permission.Description
+                                  })
+                              }).ToListAsync(ct);
+
+            var roles = rows.GroupBy(r => r.Id).Select(g => g.First())      // same role can appear once per business
+                .OrderBy(r => r.Name)
+                .Select(r => new UserRoleAccessDto(r.Id, r.Name!, r.Descriptions,
+                    r.Perms.OrderBy(p => p.Group).ThenBy(p => p.Name)
+                           .Select(p => new UserPermissionDto(p.Name, p.Group, p.Description)).ToList()))
+                .ToList();
+
+            // Union across roles, grouped for display
+            var effective = roles.SelectMany(r => r.Permissions)
+                .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
+                .GroupBy(p => p.Group ?? "Other").OrderBy(g => g.Key)
+                .Select(g => new PermissionGroupDto(g.Key, g.Select(p => p.Name).OrderBy(n => n).ToList()))
+                .ToList();
+
+            await _audit.LogAsync("UserAccessViewed", actingUserId, user.Id, "Viewed user access", AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
+
+            return AccessResult.Ok(new AdminUserAccessDto(roles
+               // , effective
+                ));
+        }
+
+        public async Task<AccessResult<Core.Models.Admin.PagedResult<AdminActivityDto>>> GetUserActivityAsync(string adminId, string actingUserId, int page, int pageSize, CancellationToken ct)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.AdminCode == adminId && u.IsAdminUser, ct);
+            if (user is null)
+                return AccessResult.Fail<Core.Models.Admin.PagedResult<AdminActivityDto>>(404, "User not found.");
+
+            page = Math.Max(1, page); pageSize = Math.Clamp(pageSize, 1, 100);
+
+            var query = _db.AdminActivityLogs.AsNoTracking()
+                .Where(a => a.ActorUserId == user.Id || a.TargetUserId == user.Id);
+
+            var total = await query.CountAsync(ct);
+            var rows = await (from a in query.OrderByDescending(a => a.OccurredAt).Skip((page - 1) * pageSize).Take(pageSize)
+                              join actor in _db.Users on a.ActorUserId equals actor.Id into g
+                              from actor in g.DefaultIfEmpty()
+                              select new
+                              {
+                                  a.Id,
+                                  a.Action,
+                                  a.Details,
+                                  a.OccurredAt,
+                                  a.IpAddress,
+                                  actor.FirstName,
+                                  actor.MiddleName,
+                                  actor.LastName,
+                                  a.AffectedRecord,
+                                  a.Module,
+                                  a.Browser,
+                                  a.OperatingSystem,
+                                  a.DeviceType,
+                                  a.DeviceName
+                              }).ToListAsync(ct);
+
+            var items = rows.Select(r => new AdminActivityDto(r.Id, r.Action,r.Module, r.Details,
+                string.IsNullOrWhiteSpace(JoinName(r.FirstName, r.MiddleName, r.LastName)) ? "System" : JoinName(r.FirstName, r.MiddleName, r.LastName),
+                r.OccurredAt, r.AffectedRecord, r.IpAddress, r.Browser, r.OperatingSystem, r.DeviceType, r.DeviceName)).ToList();
+
+            await _audit.LogAsync("UserActivityViewed", actingUserId, user.Id, "Viewed user activity log", AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
+
+            return AccessResult.Ok(new Core.Models.Admin.PagedResult<AdminActivityDto>(items, page, pageSize, total));
+        }
+
+        public async Task<AccessResult<Core.Models.Admin.PagedResult<AdminLoginHistoryDto>>> GetUserLoginHistoryAsync(string adminId, string actingUserId, int page, int pageSize, CancellationToken ct)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.AdminCode == adminId && u.IsAdminUser, ct);
+            if (user is null)
+                return AccessResult.Fail<Core.Models.Admin.PagedResult<AdminLoginHistoryDto>>(404, "User not found.");
+
+            page = Math.Max(1, page); pageSize = Math.Clamp(pageSize, 1, 100);
+
+            var query = _db.AdminLoginHistories.AsNoTracking().Where(l => l.UserId == user.Id);
+            var total = await query.CountAsync(ct);
+
+            var items = await query.OrderByDescending(l => l.LoggedInAt)
+                .Skip((page - 1) * pageSize).Take(pageSize)
+                .Select(l => new AdminLoginHistoryDto(l.Id, l.LoggedInAt, l.Succeeded, l.FailureReason, l.IpAddress, l.Browser, l.OperatingSystem, l.DeviceType, l.DeviceName))
+                .ToListAsync(ct);
+
+            await _audit.LogAsync("UserLoginHistoryViewed", actingUserId, user.Id, "Viewed user login history", AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
+
+            return AccessResult.Ok(new Core.Models.Admin.PagedResult<AdminLoginHistoryDto>(items, page, pageSize, total));
+        }
+
+        public async Task<AccessResult<AdminUserDetailDto>> UpdateUserAsync(
+    string adminId, 
+    UpdateAdminUserRequest req, string actingUserId, CancellationToken ct)
+        {
+            var phone = NormalizePhone(req.PhoneNumber);
+            if (phone is null)
+                return AccessResult.Fail<AdminUserDetailDto>(400, "Please enter a valid phone number.");
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.AdminCode == adminId && u.IsAdminUser, ct);
+            if (user is null)
+                return AccessResult.Fail<AdminUserDetailDto>(404, "User not found.");
+
+            var status = user.Status ?? (user.IsActive ? AdminUserStatus.Active : AdminUserStatus.Deactivated);
+            if (status is AdminUserStatus.Pending or AdminUserStatus.Deactivated)
+                return AccessResult.Fail<AdminUserDetailDto>(409,
+                    status == AdminUserStatus.Pending
+                        ? "This user has not accepted their invitation yet and cannot be edited."
+                        : "This user is deactivated. Activate the account before editing it.");
+
+            var role = await _db.Roles.AsNoTracking().FirstOrDefaultAsync(r =>
+                r.Id == req.RoleId && r.IsAvailableToAdmin &&
+                (r.BusinessId == null || r.BusinessId == _opts.BusinessId), ct);
+            if (role is null)
+                return AccessResult.Fail<AdminUserDetailDto>(400, "Please select a role.");
+
+            if (await _db.Users.AnyAsync(u => u.Id != user.Id && u.PhoneNumber == phone, ct))
+                return AccessResult.Fail<AdminUserDetailDto>(409, "A user with this phone number already exists.");
+
+            // Current admin-panel role assignments
+            var assignments = await _db.UserRoles.Include(ur => ur.Role)
+                .Where(ur => ur.UserId == user.Id && ur.BusinessId == _opts.BusinessId)
+                .ToListAsync(ct);
+            var activeAssignments = assignments.Where(a => a.IsActive).ToList();
+
+            var roleChanged = !(activeAssignments.Count == 1 && activeAssignments[0].RoleId == role.Id);
+
+            if (roleChanged)
+            {
+                if (user.Id == actingUserId)
+                    return AccessResult.Fail<AdminUserDetailDto>(400, "You cannot change your own role.");
+
+                var isSuperAdminNow = activeAssignments.Any(a =>
+                    string.Equals(a.Role.Name, PermissionSeeder.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+                var staysSuperAdmin = string.Equals(role.Name, PermissionSeeder.SuperAdminRole, StringComparison.OrdinalIgnoreCase);
+
+                if (isSuperAdminNow && !staysSuperAdmin)
+                {
+                    var otherSuperAdmins = await _db.UserRoles.CountAsync(ur =>
+                        ur.UserId != user.Id && ur.IsActive &&
+                        ur.Role.Name == PermissionSeeder.SuperAdminRole &&
+                        ur.User.IsActive && ur.User.Status == AdminUserStatus.Active, ct);
+
+                    if (otherSuperAdmins == 0)
+                        return AccessResult.Fail<AdminUserDetailDto>(409,
+                            "You cannot change the role of the last active Super Admin.");
+                }
+            }
+
+            // ---- Apply profile changes and record which fields changed ----
+            var first = req.FirstName.Trim();
+            var middle = string.IsNullOrWhiteSpace(req.MiddleName) ? null : req.MiddleName.Trim();
+            var last = req.LastName.Trim();
+            var department = string.IsNullOrWhiteSpace(req.Department) ? null : req.Department.Trim();
+
+            var changes = new List<string>();
+            void Track(string field, string? oldValue, string? newValue)
+            {
+                if (!string.Equals(oldValue ?? "", newValue ?? "", StringComparison.Ordinal)) changes.Add(field);
+            }
+
+            Track("FirstName", user.FirstName, first);
+            Track("MiddleName", user.MiddleName, middle);
+            Track("LastName", user.LastName, last);
+            Track("PhoneNumber", user.PhoneNumber, phone);
+            Track("Department", user.Department, department);
+
+            user.FirstName = first;
+            user.MiddleName = middle;
+            user.LastName = last;
+            user.Name = JoinName(first, middle, last);
+            user.PhoneNumber = phone;
+            user.Department = department;
+
+            // ---- Apply role change: deactivate old rows, reactivate or add the new one ----
+            string? roleChange = null;
+            if (roleChanged)
+            {
+                var oldNames = string.Join(", ", activeAssignments.Select(a => a.Role.Name));
+                roleChange = $"Role: {(string.IsNullOrEmpty(oldNames) ? "none" : oldNames)} -> {role.Name}";
+
+                foreach (var a in activeAssignments.Where(a => a.RoleId != role.Id))
+                    a.IsActive = false;                                   // keep history instead of deleting
+
+                var existing = assignments.FirstOrDefault(a => a.RoleId == role.Id);
+                if (existing is not null) existing.IsActive = true;
+                else _db.UserRoles.Add(new ApplicationUserRole
+                {
+                    UserId = user.Id,
+                    RoleId = role.Id,
+                    BusinessId = _opts.BusinessId,
+                    IsActive = true
+                });
+            }
+
+            if (changes.Count > 0 || roleChanged)
+            {
+                user.DateModified = DateTimeOffset.UtcNow;
+                user.ModifiedBy = actingUserId;
+
+                try { await _db.SaveChangesAsync(ct); }                  // one save, so profile and role change together
+                catch (DbUpdateException ex)
+                {
+                    _log.LogWarning(ex, "Update conflict for admin user {UserId}", user.Id);
+                    return AccessResult.Fail<AdminUserDetailDto>(409, "These details conflict with another user.");
+                }
+
+                if (roleChanged) _cache.InvalidateAll();                 // permissions are role-based, so refresh the cache
+
+                var details = string.Join("; ", new[]
+                {
+            changes.Count > 0 ? $"Fields: {string.Join(", ", changes)}" : null,
+            roleChange
+        }.Where(x => x is not null));
+                await _audit.LogAsync("UserUpdated", actingUserId, user.Id, details, AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
+            }
+
+            return await GetUserDetailAsync(adminId, actingUserId, ct);   // refreshed page data
         }
     }
 

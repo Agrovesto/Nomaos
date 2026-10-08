@@ -209,7 +209,8 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddSingleton<IPermissionCacheInvalidator, PermissionCacheInvalidator>();
 
             services.AddScoped<IRoleAccessManager, RoleAccessManager>();
-
+          services.AddScoped<IAdminAuditLogger, AdminAuditLogger>();
+           services.AddScoped<IClientInfoProvider, ClientInfoProvider>();
 
         }
     }
