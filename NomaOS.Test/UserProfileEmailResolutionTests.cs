@@ -1,9 +1,11 @@
-using System.Text.Json;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using System.Text.Json;
 
 namespace NomaOS.Test;
 
@@ -63,7 +65,7 @@ public class UserProfileEmailResolutionTests
     }
 
     private static OnboardingRepository CreateRepository(DataContext context) =>
-        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance);
+        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance, Mock.Of<IClientInfoProvider>());
 
     private static async Task<bool> IsReachableAsync(DataContext context)
     {

@@ -214,9 +214,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return ValidationProblemResponse();
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers["User-Agent"].ToString();
 
             return await ExecuteAsync(
-                () => _onBoardingManager.AdminLogin(model, businessCode, ip),
+                () => _onBoardingManager.AdminLogin(model, businessCode, ip, userAgent),
                 result =>
                 {
                     var response = new Response<AdminLoginResponseModel>
@@ -418,6 +419,62 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 Code = AdminResponseCodes.Success,
                 Succeeded = true,
                 Message = "User deactivated successfully.",
+                Data = result.Data
+            });
+        }
+
+
+        // GET api/admin/users/{adminId}
+        [HttpGet("user/{adminId}")]
+        [HasPermission(Permissions.Users.View)]
+        public async Task<IActionResult> GetUser(string adminId, CancellationToken ct)
+            => Respond(await _adminUserManagementManager.GetUserDetailAsync(adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct));
+
+        // GET api/admin/users/{adminId}/access
+        [HttpGet("user/{adminId}/access")]
+        [HasPermission(Permissions.Users.View)]
+        public async Task<IActionResult> GetUserAccess(string adminId, CancellationToken ct)
+            => Respond(await _adminUserManagementManager.GetUserAccessAsync(adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!,ct));
+
+        // GET api/admin/users/{adminId}/activity?page=1&pageSize=20
+        [HttpGet("user/{adminId}/activity")]
+        [HasPermission(Permissions.Users.View)]
+        public async Task<IActionResult> GetUserActivity(string adminId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+            => Respond(await _adminUserManagementManager.GetUserActivityAsync(adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, page, pageSize, ct));
+
+        // GET api/admin/users/{adminId}/logins?page=1&pageSize=20
+        [HttpGet("user/{adminId}/login-history")]
+        [HasPermission(Permissions.Users.View)]
+        public async Task<IActionResult> GetUserLogins(string adminId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+            => Respond(await _adminUserManagementManager.GetUserLoginHistoryAsync(adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, page, pageSize, ct));
+
+        private IActionResult Respond<T>(AccessResult<T> r) =>
+            r.Data is null
+                ? Failure(r.StatusCode, r.Error)
+                : Ok(new Response<T>()
+                {
+                    Code = AdminResponseCodes.Success,
+                    Succeeded = true,
+                    Message = ResponseMessages.Successful,
+                    Data = r.Data
+                });
+
+        // PUT api/admin/users/{userId}
+        [HttpPut("user/{adminId}")]
+        [HasPermission(Permissions.Users.Manage)]
+        public async Task<IActionResult> UpdateUser(string adminId, [FromBody] UpdateAdminUserRequest req, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.UpdateUserAsync(
+                adminId, req, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+
+            if (result.Data is null)
+                return Failure(result.StatusCode, result.Error);
+
+            return Ok(new Response<AdminUserDetailDto>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = "User updated successfully.",
                 Data = result.Data
             });
         }

@@ -109,7 +109,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null, OrganizationUpdateModel organizationUpdate= null);
         Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName);
         Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
-        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress);
+        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string userAgent);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -2656,10 +2656,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
 
 
-        public async Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress)
+        public async Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string userAgent)
         {
         
-            var login = await _onboardingRepository.AdminLogin(model, businessCode, ipAddress);
+            var login = await _onboardingRepository.AdminLogin(model, businessCode, ipAddress, userAgent);
+
+
 
             return login;
         }

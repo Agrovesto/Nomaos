@@ -82,7 +82,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserModel> OnUpdateUserProfileAsync(string userId, ProfileRequestModel model, string modifiedBy = null);
         Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string ipAddress = null);
         Task LogoutAsync(string userId, string jti, DateTime accessTokenExpiry, string? sessionId);
-        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress);
+        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string userAgent);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -94,11 +94,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private readonly SignInManager<User> _signInManager;
         private readonly IConfiguration _configuration;
         private readonly ILogger<OnboardingRepository> _log;
+        private readonly IClientInfoProvider _client;
         public OnboardingRepository(DataContext context,
             SignInManager<User> signInManager,
 
         IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
-            ILogger<OnboardingRepository> log)
+            ILogger<OnboardingRepository> log, IClientInfoProvider client)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -106,7 +107,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
             _signInManager = signInManager;
-
+            _client = client;
         }
         public async Task RevokeAsync(string jti, string userId, DateTime tokenExpiry)
         {
@@ -567,6 +568,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             });
 
             user.LastLoginDate = DateTimeOffset.UtcNow;
+
+      
             await _context.SaveChangesAsync();
 
             return new TokenModel
@@ -2694,7 +2697,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
 
         #region admin
-        public async Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress)
+        public async Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
         {
             var loginModel = new LoginModel
             {
@@ -2755,6 +2758,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             // 4. Only now are tokens issued.
             var weak = CheckWeakCredentials(user, loginModel);
 
+
+
             var tokens = await IssueTokensAsync(
                 user,
                 activeBusiness,
@@ -2764,6 +2769,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 ipAddress,
                 adminAccess: access);
 
+            var c = _client.Get();     // call once per login attempt
+
+            _context.AdminLoginHistories.Add(new AdminLoginHistory
+            {
+
+                UserId = user.Id,
+                LoggedInAt = DateTimeOffset.UtcNow,
+                Succeeded = true /* or false */,
+                FailureReason = null /* "Incorrect password" | "Account inactive" | "No Admin Panel access" */,
+                IpAddress = ipAddress,
+                UserAgent = c.UserAgent,//Request.Headers.UserAgent.ToString()
+                Browser = c.Browser,
+                OperatingSystem = c.OperatingSystem,
+                DeviceType = c.DeviceType,
+                DeviceName = c.DeviceName
+            });
+
+
+
+            await _context.SaveChangesAsync();
             return AdminLoginResult.Ok(new AdminLoginResponseModel
             {
                 Token= tokens.Token,

@@ -569,7 +569,14 @@ namespace Agrovesto.Backend.Infrastructure.DB
             modelBuilder.Entity<User>().HasIndex(u => u.AdminCode).IsUnique();          // multiple NULLs allowed in MySQL
             modelBuilder.Entity<AdminInvitation>().HasIndex(i => i.TokenHash).IsUnique();
             modelBuilder.Entity<AdminInvitation>().HasIndex(i => i.UserId);
+
+            modelBuilder.Entity<AdminLoginHistory>().HasIndex(x => new { x.UserId, x.LoggedInAt });
+            modelBuilder.Entity<AdminActivityLog>().HasIndex(x => new { x.ActorUserId, x.OccurredAt });
+            modelBuilder.Entity<AdminActivityLog>().HasIndex(x => new { x.TargetUserId, x.OccurredAt });
         }
+        public DbSet<AdminLoginHistory> AdminLoginHistories => Set<AdminLoginHistory>();
+        public DbSet<AdminActivityLog> AdminActivityLogs => Set<AdminActivityLog>();
+
         public DbSet<AdminInvitation> AdminInvitations { get; set; }
         public DbSet<AdminCodeSequence> AdminCodeSequences { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
