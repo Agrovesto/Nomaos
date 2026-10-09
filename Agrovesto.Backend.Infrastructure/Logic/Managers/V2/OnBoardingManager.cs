@@ -71,7 +71,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode,
         string? ipAddress = null);
         Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode);
-        Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args);
+        Task<string> ResendOnboardingOtp(ResendOtpRequest model, VerificationArgs args);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
@@ -110,6 +110,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName);
         Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
         Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string userAgent);
+        Task<(bool Status, string Message)> ResendCredentialAsync(ForgotCredentialModel model);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -1276,7 +1277,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return validate.IsUsed;
         }
 
-        public async Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args)
+        public async Task<string> ResendOnboardingOtp(ResendOtpRequest model, VerificationArgs args)
         {
             try
             {
@@ -2266,6 +2267,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
 
             return _credentialChangeService.ForgotCredential(model);
+        }
+        public Task<(bool Status, string Message)> ResendCredentialAsync(ForgotCredentialModel model)
+        {
+
+            return _credentialChangeService.ResendCredentialAsync(model);
         }
         
         public Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model)

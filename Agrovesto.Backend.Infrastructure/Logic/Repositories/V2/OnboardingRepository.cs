@@ -695,6 +695,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     u.Name,
                     u.NIN,
                     u.BVN,
+                    u.IsBvnVerified,
+                    u.IsNinVerified,
+                    
                     Kyc = kyc 
                 })
                 .AsNoTracking()
@@ -727,6 +730,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 NIN = userWithKyc.NIN,
                 BVN = userWithKyc.BVN,
                 Roles = roles,
+                IsNinVerified=userWithKyc.IsNinVerified,
+                IsBvnVerified=userWithKyc.IsBvnVerified,
                 KYC = userWithKyc.Kyc == null ? null : new KYCDto
                 {
                     NIN = userWithKyc.Kyc.Number,
@@ -771,7 +776,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 DateOfBirth = user.DateOfBirth,
                 IsBvnVerified = user.IsBvnVerified,
                 IsNinVerified = user.IsNinVerified,
-              
+                Gender=user?.Gender,
                 Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
             };
             var allRoleTypes = new List<string> { user.UserType };
