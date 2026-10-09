@@ -33,7 +33,10 @@ namespace Agrovesto.Backend.Core.Enums
         LOGIN,
         RESET_PASSWORD,
         FORGOT_CREDENTIAL,      // per account (email/phone)
-        FORGOT_CREDENTIAL_IP
+        FORGOT_CREDENTIAL_IP,
+        RESEND_CREDENTIAL_COOLDOWN, // e.g. 1 request / 60 seconds per account
+        RESEND_CREDENTIAL,          // e.g. 3 requests / 10 minutes per account
+        RESEND_CREDENTIAL_IP
     }
     public enum InventoryTransactionType
     {
