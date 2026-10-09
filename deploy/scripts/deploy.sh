@@ -3,11 +3,24 @@
 # deploy.sh — containerized blue/green deployment for NomaOS on EC2
 #
 # Usage:
-#   deploy.sh --app nomaos-api --image <ecr-ref> [options]
+#   deploy.sh --app <key>-api --image <ecr-ref> [options]
 #
-# Port allocation:
-#   blue  -> 5007
-#   green -> 5008
+# Each app deploys behind its OWN nginx vhost (dev/<key>-api.nomaos.com, with
+# two renames: nomaos -> dev-noma-api, serviceprovider -> dev-service-api).
+# The vhost routes to the active slot through a map variable, resolved by
+# nginx at request time, so a missing slot 502s its vhost and never takes the
+# edge down. The slot file this script writes must therefore be the map
+# format — a static `upstream` block makes nginx resolve at start-up and
+# exit ("host not found in upstream") instead. See
+# infrastructure/docs/blue-green-deployments.md.
+#
+# Port allocation (per app, no overlaps):
+#   nomaos-api           blue 5007 / green 5008
+#   wallet-api           blue 5009 / green 5010
+#   onboarding-api       blue 5011 / green 5012
+#   input-api            blue 5013 / green 5014
+#   moneval-api          blue 5015 / green 5016
+#   serviceprovider-api  blue 5017 / green 5018
 #
 # Deployment flow:
 #   1. Validate configuration
@@ -17,7 +30,7 @@
 #   5. Application-local HTTP healthcheck inside candidate container
 #   6. Nginx-container -> candidate HTTP healthcheck
 #   7. EC2-host -> candidate HTTP healthcheck
-#   8. Flip Nginx atomically
+#   8. Flip Nginx atomically (rewrite slot file map, nginx -t, reload)
 #   9. Verify traffic through Nginx
 #  10. Stop old slot
 #  11. Retain Docker image cache
@@ -76,7 +89,9 @@ Usage: deploy.sh --app <name> --image <ref> [options]
 
 Required:
   --app <name>
-      App key, e.g. nomaos-api
+      App key. One of:
+        nomaos-api  wallet-api  onboarding-api
+        input-api   moneval-api  serviceprovider-api
 
   --image <ref>
       Full immutable image reference.
@@ -113,26 +128,76 @@ Environment overrides:
   EDGE_RETRIES=2
   EDGE_RETRY_INTERVAL=1
   DRAIN_SECONDS=2
+  EDGE_HEALTH_HOST=<fqdn>
+      Host header for the post-flip edge check.
+      Default: the app's own vhost, e.g. dev-wallet-api.nomaos.com
+  DOMAIN_NAME=<domain>
+      Zone used to build that default.
+      Default: nomaos.com
 
-Port allocation:
-  blue  -> 5007
-  green -> 5008
+Port allocation (per app):
+  nomaos-api           blue 5007 / green 5008
+  wallet-api           blue 5009 / green 5010
+  onboarding-api       blue 5011 / green 5012
+  input-api            blue 5013 / green 5014
+  moneval-api          blue 5015 / green 5016
+  serviceprovider-api  blue 5017 / green 5018
 EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Slot -> port mapping
+#
+# Ports are per app: the pairs are allocated in the dev infrastructure stack
+# (dev/terraform.auto.tfvars, apis.<key>.blue_green) and documented in
+# docs/blue-green-deployments.md. Never reuse a pair across apps.
 # ─────────────────────────────────────────────────────────────────────────────
 slot_port() {
-  case "$1" in
-    blue)
-      echo 5007
+  local slot="$1"
+  case "${APP_NAME}:${slot}" in
+    nomaos-api:blue)           echo 5007 ;;
+    nomaos-api:green)          echo 5008 ;;
+    wallet-api:blue)           echo 5009 ;;
+    wallet-api:green)          echo 5010 ;;
+    onboarding-api:blue)       echo 5011 ;;
+    onboarding-api:green)      echo 5012 ;;
+    input-api:blue)            echo 5013 ;;
+    input-api:green)           echo 5014 ;;
+    moneval-api:blue)          echo 5015 ;;
+    moneval-api:green)         echo 5016 ;;
+    serviceprovider-api:blue)  echo 5017 ;;
+    serviceprovider-api:green) echo 5018 ;;
+    *)
+      die "no blue/green port pair for app '${APP_NAME}' slot '${slot}'"
       ;;
-    green)
-      echo 5008
+  esac
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# App -> vhost hostname mapping
+#
+# The nginx vhost each app deploys behind is the API's own hostname, which is
+# NOT always "<key>-api.<domain>": nomaos serves dev-noma-api and
+# serviceprovider serves dev-service-api. Keep in sync with
+# dev/terraform.auto.tfvars (apis.<key>.subdomain).
+# ─────────────────────────────────────────────────────────────────────────────
+vhost_hostname() {
+  local domain="${DOMAIN_NAME:-nomaos.com}"
+  case "$1" in
+    nomaos-api)          echo "dev-noma-api.${domain}" ;;
+    serviceprovider-api) echo "dev-service-api.${domain}" ;;
+    *-api)               echo "dev-${1}.${domain}" ;;
+    *) die "unknown app '$1': expected <key>-api" ;;
+  esac
+}
+
+is_managed_app() {
+  case "$1" in
+    nomaos-api | wallet-api | onboarding-api | input-api | moneval-api | serviceprovider-api)
+      return 0
       ;;
     *)
-      die "invalid slot '$1'; expected blue or green"
+      return 1
       ;;
   esac
 }
@@ -185,6 +250,11 @@ done
   exit 2
 }
 
+is_managed_app "$APP_NAME" || {
+  usage >&2
+  die "unknown app '$APP_NAME': expected nomaos-api, wallet-api, onboarding-api, input-api, moneval-api or serviceprovider-api"
+}
+
 [[ -n "$IMAGE" ]] || {
   usage >&2
   exit 2
@@ -205,6 +275,11 @@ UPSTREAM_NAME="${UPSTREAM_NAME:-${APP_NAME//-/_}}"
 UPSTREAM_DIR="$NOMAOS_STATE_DIR/nginx/upstreams"
 UPSTREAM_FILE="$UPSTREAM_DIR/${UPSTREAM_NAME}.conf"
 COMMIT_SHA="${COMMIT_SHA:-unknown}"
+
+# Host header for the post-flip edge check. The nginx default server answers
+# 404 to any other name, and the vhost routes by Host — so the check must use
+# the app's own hostname (the vhost that now fronts the slots).
+EDGE_HEALTH_HOST="${EDGE_HEALTH_HOST:-$(vhost_hostname "$APP_NAME")}"
 
 require_runtime_env() {
   local name="$1"
@@ -279,6 +354,7 @@ cat <<EOF
  target port     : $TARGET_PORT
 
  upstream        : $UPSTREAM_FILE
+ vhost           : $EDGE_HEALTH_HOST
  nginx container : $NGINX_CONTAINER
 
  docker health   : $CHECK_DOCKER_HEALTH
@@ -302,10 +378,14 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Compose helper
 #
-# Each slot gets its own deterministic port:
+# Each slot gets its own deterministic port, looked up per app:
 #
-#   blue  -> 5007
-#   green -> 5008
+#   nomaos-api           blue 5007 / green 5008
+#   wallet-api           blue 5009 / green 5010
+#   onboarding-api       blue 5011 / green 5012
+#   input-api            blue 5013 / green 5014
+#   moneval-api          blue 5015 / green 5016
+#   serviceprovider-api  blue 5017 / green 5018
 #
 # This function deliberately calculates the port from the slot passed to it.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -452,6 +532,14 @@ reload_nginx() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Write upstream atomically
+#
+# The file MUST be a map over the empty string, and the variable name MUST be
+# $<upstream_name>_backend: the vhosts proxy through that variable, which is
+# how nginx resolves the slot hostname at request time (Docker DNS, 10s
+# cache) instead of at start-up. A static `upstream` block with an
+# unresolvable slot name keeps the whole nginx edge from starting — the
+# 2026-10-09 outage. max_fails/fail_timeout/keepalive are upstream-block
+# directives and deliberately gone with it.
 # ─────────────────────────────────────────────────────────────────────────────
 write_upstream() {
   local slot="$1"
@@ -469,10 +557,10 @@ write_upstream() {
 # slot=$slot
 # port=$port
 # commit=$COMMIT_SHA
+# vhost=$EDGE_HEALTH_HOST
 
-upstream ${UPSTREAM_NAME} {
-    server ${APP_NAME}-${slot}:${port} max_fails=2 fail_timeout=5s;
-    keepalive 32;
+map '' \$${UPSTREAM_NAME}_backend {
+    default ${APP_NAME}-${slot}:${port};
 }
 EOF
 
@@ -705,6 +793,10 @@ FLIPPED=true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. Nginx validation + reload
+#
+# nginx -t is the guard that keeps a wrong-format slot file from ever going
+# live: if the file does not define $<upstream_name>_backend, validation
+# fails and the previous file is restored below.
 # ─────────────────────────────────────────────────────────────────────────────
 if ! reload_nginx; then
   die "nginx reload failed — previous upstream will be restored"
@@ -716,6 +808,13 @@ ok "traffic switched to $TARGET"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 9. Post-flip edge healthcheck
+#
+# Runs INSIDE the nginx container, sending the app's vhost as the Host
+# header, so it exercises exactly the path a browser takes: vhost match ->
+# map variable -> runtime DNS -> slot container /health. Options come before
+# the URL: busybox wget treats anything after the first URL as another URL,
+# so a trailing --header never took effect in the previous version of this
+# check.
 # ─────────────────────────────────────────────────────────────────────────────
 EDGE_OK=false
 
@@ -729,8 +828,8 @@ for attempt in $(seq 1 "$EDGE_RETRIES"); do
     -q \
     -O /dev/null \
     --timeout=5 \
+    --header="Host: ${EDGE_HEALTH_HOST}" \
     "$EDGE_URL" \
-    --header="Host: ${EDGE_HEALTH_HOST:-localhost}" \
     2>/dev/null; then
 
     EDGE_OK=true
@@ -825,6 +924,7 @@ echo "  Previous port       : $ACTIVE_PORT"
 echo "  Active slot         : $TARGET"
 echo "  Active port         : $TARGET_PORT"
 echo "  Active container    : $TARGET_CONTAINER"
+echo "  Vhost               : $EDGE_HEALTH_HOST"
 echo "  Image               : $IMAGE"
 echo "  Commit              : $COMMIT_SHA"
 echo ""
