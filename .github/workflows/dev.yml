@@ -1,0 +1,381 @@
+name: CI - Dev Build and Test
+
+on:
+  pull_request:
+    branches: [dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ============================================================
+# GITHUB TOKEN PERMISSIONS
+# ============================================================
+permissions:
+  contents: read
+  checks: write
+
+env:
+  DOTNET_VERSION: 8.0.x
+  DOTNET_SDK_VERSION: 8.0.423
+  SOLUTION_PATH: Agrovesto.Backend.sln
+  PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+  SONAR_PROJECT_KEY: Agrovesto.Backend.API
+  PUBLISH_DIR: ${{ github.workspace }}/publish
+  COMMIT_SHA: ${{ github.sha }}
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_DETERMINISTIC: true
+
+defaults:
+  run:
+    shell: bash
+
+
+# ==============================================================
+# JOB 1 — DEV CI (BUILD + TEST ONLY)
+# ==============================================================
+
+jobs:
+
+  dev-ci:
+    name: 🔍 Dev Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      test-outcome: ${{ steps.test.outcome }}
+      build-outcome: ${{ steps.build.outcome }}
+      coverage-pct: ${{ steps.coverage-summary.outputs.line_coverage }}
+
+    steps:
+      # =========================================================
+      # CHECKOUT
+      # =========================================================
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # =========================================================
+      # PIN .NET SDK
+      # =========================================================
+      - name: 📌 Pin .NET SDK version
+        run: |
+          cat > global.json << EOF
+          {
+            "sdk": {
+              "version": "${{ env.DOTNET_SDK_VERSION }}",
+              "rollForward": "latestPatch"
+            }
+          }
+          EOF
+          echo "===== global.json ====="
+          cat global.json
+      # =========================================================
+      # SETUP .NET
+      # =========================================================
+      - name: ⚙️ Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      # =========================================================
+      # VERIFY SDK
+      # =========================================================
+      - name: 🔍 Verify SDK version
+        run: |
+          SDK=$(dotnet --version)
+          echo "Active SDK: $SDK"
+          if [[ "$SDK" != 8.* ]]; then
+            echo "❌ Expected .NET 8 SDK"
+            exit 1
+          fi
+      # =========================================================
+      # SonarQube scanning is temporarily disabled. The related steps are
+      # commented out below; build, tests, and coverage remain enabled.
+      # JAVA FOR SONARQUBE
+      # ========================================================
+      # - name: ☕ Setup Java 17
+        # uses: actions/setup-java@v4
+        # with:
+          # distribution: zulu
+          # java-version: '17'
+      # =========================================================
+      # CACHE NUGET
+      # =========================================================
+      - name: 💾 Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: >
+            nuget-${{ runner.os }}-
+            dotnet-${{ env.DOTNET_SDK_VERSION }}-
+            ${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-dotnet-${{ env.DOTNET_SDK_VERSION }}-
+            nuget-${{ runner.os }}-
+      # =========================================================
+      # CACHE SONAR
+      # =========================================================
+      # - name: 💾 Cache SonarQube
+        # uses: actions/cache@v4
+        # with:
+          # path: ~/.sonar/cache
+          # key: sonar-${{ runner.os }}-7.1.0
+          # restore-keys: |
+            # sonar-${{ runner.os }}-
+      # =========================================================
+      # CACHE .NET TOOLS
+      # =========================================================
+      # - name: 💾 Cache .NET tools
+        # uses: actions/cache@v4
+        # with:
+          # path: ~/.dotnet/tools
+          # key: >
+            # dotnet-tools-${{ runner.os }}-
+            # ${{ hashFiles('**/.config/dotnet-tools.json') }}
+          # restore-keys: |
+            # dotnet-tools-${{ runner.os }}-
+      # =========================================================
+      # RESTORE
+      # =========================================================
+      - name: 📦 Restore dependencies
+        run: |
+          dotnet restore \
+            "${{ env.SOLUTION_PATH }}" \
+            --verbosity quiet \
+            /p:ContinuousIntegrationBuild=true
+      # =========================================================
+      # INSTALL SONARSCANNER
+      # =========================================================
+      # - name: 🛠️ Install SonarScanner
+        # run: |
+          # if dotnet tool list --global | grep -q "dotnet-sonarscanner"; then
+            # echo "✅ SonarScanner already available"
+          # else
+            # dotnet tool install \
+              # --global \
+              # dotnet-sonarscanner \
+              # --version 7.1.0
+          # fi
+          # echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      # =========================================================
+      # SONAR BEGIN
+      # =========================================================
+      # - name: 🔍 SonarQube — Begin
+        # env:
+          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          # SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # run: |
+          # dotnet sonarscanner begin \
+            # /k:"${{ env.SONAR_PROJECT_KEY }}" \
+            # /d:sonar.host.url="${SONAR_HOST_URL}" \
+            # /d:sonar.token="${SONAR_TOKEN}" \
+            # /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
+            # /d:sonar.cs.vstest.reportsPaths="TestResults/**/*.trx" \
+            # /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
+            # /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
+            # /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
+        # continue-on-error: true
+      # =========================================================
+      # BUILD
+      # =========================================================
+      - name: 🏗️ Build
+        id: build
+        run: |
+          START=$(date +%s)
+          dotnet build \
+            "${{ env.SOLUTION_PATH }}" \
+            --configuration Release \
+            --no-restore \
+            --verbosity quiet \
+            -maxcpucount \
+            2>&1 | tee build.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          END=$(date +%s)
+          {
+            echo "### 🏗️ Build"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Status | $([ "$EXIT_CODE" -eq 0 ] && echo '✅ Success' || echo '❌ Failed') |"
+            echo "| Duration | $((END - START))s |"
+            echo "| Warnings | ⚠️ $(grep -c ': warning ' build.log || true) |"
+            echo "| Errors | ❌ $(grep -c ': error ' build.log || true) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$EXIT_CODE"
+
+      # =========================================================
+      # TEST + COVERAGE
+      # =========================================================
+      - name: 🧪 Run tests with coverage
+        id: test
+        run: |
+          START=$(date +%s)
+          dotnet test \
+            "${{ env.SOLUTION_PATH }}" \
+            --configuration Release \
+            --no-build \
+            --verbosity minimal \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect "XPlat Code Coverage" \
+            --settings coverlet.runsettings \
+            --results-directory ./TestResults \
+            -p:MaxCpuCount=2 \
+            2>&1 | tee test.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+          set +o pipefail
+          PASSED=$(
+            grep -oP 'Passed:\s*\K[0-9]+' test.log |
+            tail -1
+          )
+          FAILED=$(
+            grep -oP 'Failed:\s*\K[0-9]+' test.log |
+            tail -1
+          )
+          SKIPPED=$(
+            grep -oP 'Skipped:\s*\K[0-9]+' test.log |
+            tail -1
+          )
+          TOTAL=$(
+            grep -oP 'Total:\s*\K[0-9]+' test.log |
+            tail -1
+          )
+          PASSED="${PASSED:-0}"
+          FAILED="${FAILED:-0}"
+          SKIPPED="${SKIPPED:-0}"
+          TOTAL="${TOTAL:-0}"
+          set -o pipefail
+          {
+            echo "### 🧪 Test Results"
+            echo ""
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| ✅ Passed | $PASSED |"
+            echo "| ❌ Failed | $FAILED |"
+            echo "| ⏭️ Skipped | $SKIPPED |"
+            echo "| 📊 Total | $TOTAL |"
+            echo "| ⏱️ Duration | ${ELAPSED}s |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$EXIT_CODE"
+
+
+      # =========================================================
+      # SONAR END
+      # =========================================================
+
+      # - name: 🏁 SonarQube — End
+        # env:
+          # SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        # run: |
+          # dotnet sonarscanner end \
+            # /d:sonar.token="${SONAR_TOKEN}"
+        # continue-on-error: true
+
+      # =========================================================
+      # COVERAGE SUMMARY
+      # =========================================================
+
+      - name: 📊 Parse coverage summary
+        id: coverage-summary
+        if: always()
+        run: |
+          COVERAGE_FILE=$(
+            find ./TestResults \
+              -name "coverage.opencover.xml" \
+              | head -1 2>/dev/null || true
+          )
+
+          if [ -z "$COVERAGE_FILE" ]; then
+            echo "⚠️ No coverage file found"
+
+            printf 'line_coverage=N/A\n' \
+              >> "$GITHUB_OUTPUT"
+
+            exit 0
+          fi
+
+          set +o pipefail
+
+          LINE_RATE=$(
+            grep \
+              -oP 'sequenceCoverage="\K[0-9.]+' \
+              "$COVERAGE_FILE" |
+            head -1
+          )
+
+          BRANCH_RATE=$(
+            grep \
+              -oP 'branchCoverage="\K[0-9.]+' \
+              "$COVERAGE_FILE" |
+            head -1
+          )
+
+          set -o pipefail
+
+          LINE_RATE="${LINE_RATE:-0}"
+          BRANCH_RATE="${BRANCH_RATE:-0}"
+
+          [[ "$LINE_RATE" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+            || LINE_RATE="0"
+
+          [[ "$BRANCH_RATE" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+            || BRANCH_RATE="0"
+
+          printf 'line_coverage=%s\n' "$LINE_RATE" \
+            >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### 📊 Code Coverage"
+            echo ""
+            echo "| Type | Coverage |"
+            echo "|------|----------|"
+            printf "| 📝 Line/Sequence | %s%% |\n" "$LINE_RATE"
+            printf "| 🌿 Branch | %s%% |\n" "$BRANCH_RATE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      # =========================================================
+      # TEST REPORT
+      # =========================================================
+
+      - name: 📝 Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Test Results
+          path: '**/TestResults/**/*.trx'
+          reporter: dotnet-trx
+          fail-on-empty: true
+          fail-on-error: true
+      # =========================================================
+      # PR SUMMARY
+      # =========================================================
+
+      - name: ✅ PR Quality Gate Summary
+        if: always()
+        run: |
+          BUILD_STATUS="${{ steps.build.outcome }}"
+          TEST_STATUS="${{ steps.test.outcome }}"
+          COVERAGE="${{ steps.coverage-summary.outputs.line_coverage }}"
+
+          STATUS_ICON() {
+            [ "$1" = "success" ] &&
+              echo "✅" ||
+              echo "❌"
+          }
+
+          {
+            echo "## 🎯 Dev CI Summary"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| 🏗️ Build | $(STATUS_ICON "$BUILD_STATUS") ${BUILD_STATUS^} |"
+            echo "| 🧪 Tests | $(STATUS_ICON "$TEST_STATUS") ${TEST_STATUS^} |"
+            echo "| 📊 Coverage | ${COVERAGE}% |"
+            echo ""
+            echo "> Commit \`${{ env.COMMIT_SHA }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
