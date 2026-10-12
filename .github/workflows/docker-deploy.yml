@@ -1,507 +1,561 @@
-name: Docker Build & Blue/Green Deploy
-
-# Build once in CI -> push an immutable image to ECR -> EC2 pulls that exact
-# digest and flips slots. The deploy helper + Compose file are bundled by the
-# runner and sent through SSM; EC2 does not need a Git checkout or GitHub access.
+name: Build and Deploy (staging branch)
 
 on:
-  # PRs targeting devops validate the Docker image only; they never receive
-  # AWS credentials and never deploy.
-  pull_request:
-    branches:
-      - devops
-
   push:
-    branches:
-      - devops
-
-  workflow_dispatch:
-    inputs:
-      app:
-        description: "Which app to deploy"
-        required: true
-        default: nomaos-api
-        type: choice
-        options:
-          - nomaos-api
-
-      environment:
-        description: "Target environment"
-        required: true
-        default: prod
-        type: choice
-        options:
-          - staging
-          - prod
+    branches: [stage]
 
 concurrency:
-  group: "docker-deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}-${{ inputs.app || 'nomaos-api' }}"
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+# ============================================================
+# GITHUB TOKEN PERMISSIONS
+# ============================================================
 permissions:
-  id-token: write
   contents: read
 
 env:
-  AWS_REGION: eu-west-1
-  ECR_REPOSITORY: agrovesto-dev-nomaos
-  APP_NAME: ${{ inputs.app || 'nomaos-api' }}
+  DOTNET_VERSION: 8.0.x
+  DOTNET_SDK_VERSION: 8.0.423
+  SOLUTION_PATH: Agrovesto.Backend.sln
+  PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+  PUBLISH_DIR: ${{ github.workspace }}/publish
+  COMMIT_SHA: ${{ github.sha }}
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_DETERMINISTIC: true
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
+  build-deploy-staging:
+    name: 🚀 Build + Test + Deploy (staging branch)
 
-  ##########################################################################
-  # PR VALIDATION
-  ##########################################################################
-  validate-pr:
-    name: Validate pull request image
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    timeout-minutes: 30
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+    environment:
+      name: dev
+      url: https://dev-noma-api.nomaos.com/health
 
-      - name: Build image (no push)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: false
-          tags: agrovesto-dev-nomaos:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha,scope=nomaos-api
-
-
-  ##########################################################################
-  # BUILD
-  ##########################################################################
-  build:
-    name: Build & push image
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
     outputs:
-      image: ${{ steps.meta.outputs.image }}
-      digest_ref: ${{ steps.digest.outputs.digest_ref }}
+      version: ${{ steps.version.outputs.value }}
 
     steps:
+      # =========================================================
+      # CHECKOUT
+      # =========================================================
 
-      - name: Checkout
+      - name: 📥 Checkout
         uses: actions/checkout@v4
-
-      ######################################################################
-      # AWS
-      ######################################################################
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          fetch-depth: 0
 
-      ######################################################################
-      # ECR
-      ######################################################################
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      # =========================================================
+      # PIN SDK
+      # =========================================================
 
-      - name: Ensure ECR repository exists
+      - name: 📌 Pin .NET SDK version
         run: |
-          set -euo pipefail
+          cat > global.json << EOF
+          {
+            "sdk": {
+              "version": "${{ env.DOTNET_SDK_VERSION }}",
+              "rollForward": "latestPatch"
+            }
+          }
+          EOF
 
-          if ! aws ecr describe-repositories \
-               --repository-names "$ECR_REPOSITORY" \
-               >/dev/null 2>&1; then
+          echo "===== global.json ====="
+          cat global.json
 
-            echo "creating repository $ECR_REPOSITORY"
 
-            aws ecr create-repository \
-              --repository-name "$ECR_REPOSITORY" \
-              --image-scanning-configuration scanOnPush=true \
-              --image-tag-mutability IMMUTABLE
+      # =========================================================
+      # SETUP .NET
+      # =========================================================
 
-            aws ecr put-lifecycle-policy \
-              --repository-name "$ECR_REPOSITORY" \
-              --lifecycle-policy-text '{
-                "rules": [{
-                  "rulePriority": 1,
-                  "description": "Keep last 3 images",
-                  "selection": {
-                    "tagStatus": "any",
-                    "countType": "imageCountMoreThan",
-                    "countNumber": 3
-                  },
-                  "action": {
-                    "type": "expire"
-                  }
-                }]
-              }'
+      - name: ⚙️ Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+
+      # =========================================================
+      # VERIFY SDK
+      # =========================================================
+
+      - name: 🔍 Verify SDK
+        run: |
+          SDK=$(dotnet --version)
+
+          echo "Active SDK: $SDK"
+
+          if [[ "$SDK" != 8.* ]]; then
+            echo "❌ Expected .NET 8 SDK"
+            exit 1
           fi
 
-      ######################################################################
-      # IMAGE METADATA
-      ######################################################################
-      - name: Compute image metadata
-        id: meta
-        run: |
-          set -euo pipefail
 
-          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-          SHORT_SHA="$(echo "${{ github.sha }}" | cut -c1-12)"
-          TAG="${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+      # =========================================================
+      # CACHE NUGET
+      #
+      # This is the most important performance optimization.
+      #
+      # We persist the dependency cache, NOT the application.
+      # ==============================================================
 
-          echo "image=${REGISTRY}/${ECR_REPOSITORY}:${TAG}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      ######################################################################
-      # BUILDX
-      ######################################################################
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      ######################################################################
-      # BUILD + CACHE + PUSH
-      ######################################################################
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v7
+      - name: 💾 Cache NuGet packages
+        uses: actions/cache@v4
         with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.image }}
-          provenance: false
-          build-args: |
-            COMMIT_SHA=${{ github.sha }}
-            BUILD_VERSION=1.0.${{ github.run_number }}
-            BUILT_AT=${{ steps.meta.outputs.built_at }}
-          cache-from: type=gha,scope=nomaos-api
-          cache-to: type=gha,scope=nomaos-api,mode=max,ignore-error=true
+          path: ~/.nuget/packages
 
-      ######################################################################
-      # IMMUTABLE DIGEST
-      ######################################################################
-      - name: Record immutable digest
-        id: digest
+          key: >
+            nuget-${{ runner.os }}-
+            dotnet-${{ env.DOTNET_SDK_VERSION }}-
+            ${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+
+          restore-keys: |
+            nuget-${{ runner.os }}-dotnet-${{ env.DOTNET_SDK_VERSION }}-
+            nuget-${{ runner.os }}-
+
+
+      # =========================================================
+      # RESTORE
+      # =========================================================
+
+      - name: 📦 Restore dependencies
         run: |
-          set -euo pipefail
+          dotnet restore \
+            "${{ env.SOLUTION_PATH }}" \
+            --verbosity quiet \
+            /p:ContinuousIntegrationBuild=true
 
-          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
 
-          echo "digest_ref=${REGISTRY}/${ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
+      # =========================================================
+      # VERSION
+      # =========================================================
+
+      - name: 🏷️ Resolve version
+        id: version
+        run: |
+          VERSION=$(
+            grep \
+              -oPm1 '(?<=<Version>)[^<]+' \
+              "${{ env.PROJECT_PATH }}" \
+              2>/dev/null ||
+              true
+          )
+
+          VERSION="${VERSION:-1.0.${{ github.run_number }}}"
+
+          echo "value=$VERSION" \
             >> "$GITHUB_OUTPUT"
 
-      ######################################################################
-      # BUILD SUMMARY
-      ######################################################################
-      - name: Summary
+          echo "📦 Version: $VERSION"
+
+
+      # =========================================================
+      # BUILD
+      # =========================================================
+
+      - name: 🏗️ Build
+        id: build
         run: |
+          START=$(date +%s)
+
+          dotnet build \
+            "${{ env.SOLUTION_PATH }}" \
+            --configuration Release \
+            --no-restore \
+            --verbosity quiet \
+            -maxcpucount \
+            2>&1 | tee build.log
+
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          END=$(date +%s)
+
           {
-            echo "### Image built"
+            echo "### 🏗️ Build"
             echo ""
-            echo "| Field | Value |"
-            echo "|---|---|"
-            echo "| Tag | \`${{ steps.meta.outputs.image }}\` |"
-            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
-            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Status | $([ "$EXIT_CODE" -eq 0 ] && echo '✅ Success' || echo '❌ Failed') |"
+            echo "| Duration | $((END - START))s |"
+            echo "| Warnings | ⚠️ $(grep -c ': warning ' build.log || true) |"
+            echo "| Errors | ❌ $(grep -c ': error ' build.log || true) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$EXIT_CODE"
+
+
+      # =========================================================
+      # TEST
+      # =========================================================
+
+      - name: 🧪 Test with coverage
+        id: test
+        run: |
+          START=$(date +%s)
+
+          dotnet test \
+            "${{ env.SOLUTION_PATH }}" \
+            --configuration Release \
+            --no-build \
+            --verbosity minimal \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect "XPlat Code Coverage" \
+            --settings coverlet.runsettings \
+            --results-directory ./TestResults \
+            -p:MaxCpuCount=2
+
+          EXIT_CODE=$?
+
+          END=$(date +%s)
+
+          echo "Tests completed in $((END - START))s"
+
+          exit "$EXIT_CODE"
+
+
+      # =========================================================
+      # PUBLISH APPLICATION
+      #
+      # THIS STAYS ON THE SAME RUNNER.
+      #
+      # Nothing goes to GitHub artifact storage.
+      # =========================================================
+
+      - name: 🚀 Publish application
+        id: publish
+        run: |
+
+          START=$(date +%s)
+
+          rm -rf "${{ env.PUBLISH_DIR }}"
+
+          dotnet publish \
+            "${{ env.PROJECT_PATH }}" \
+            --configuration Release \
+            --runtime linux-x64 \
+            --framework net8.0 \
+            --self-contained true \
+            --output "${{ env.PUBLISH_DIR }}" \
+            --verbosity quiet \
+            -p:ContinuousIntegrationBuild=true \
+            -p:Deterministic=true \
+            -p:DebugType=none \
+            -p:DebugSymbols=false \
+            -maxcpucount
+
+
+          END=$(date +%s)
+
+          SIZE=$(
+            du -sh "${{ env.PUBLISH_DIR }}" |
+            cut -f1
+          )
+
+
+          {
+            echo "### 🚀 Publish"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| ✅ Status | Success |"
+            echo "| 📦 Size | $SIZE |"
+            echo "| 📁 Files | $(find "${{ env.PUBLISH_DIR }}" -type f | wc -l | tr -d ' ') |"
+            echo "| ⏱️ Duration | $((END - START))s |"
+            echo "| 🏷️ Version | ${{ steps.version.outputs.value }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
 
-  ##########################################################################
-  # DEPLOY
-  ##########################################################################
-  deploy:
-    name: Blue/green deploy to EC2
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    needs: build
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
+      # =========================================================
+      # WRITE DEPLOYMENT METADATA
+      # =========================================================
 
-    steps:
-
-      ######################################################################
-      # DEPLOY TOOLING
-      ######################################################################
-      - name: Checkout deployment files
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-          sparse-checkout: |
-            deploy/scripts/deploy.sh
-            deploy/scripts/lib.sh
-            deploy/compose/docker-compose.app.yml
-          sparse-checkout-cone-mode: false
-
-      ######################################################################
-      # AWS
-      ######################################################################
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      ######################################################################
-      # SSM DEPLOY
-      ######################################################################
-      - name: Deploy via SSM
-        id: ssm
+      - name: 🏷️ Write deployment metadata
         run: |
-          set -euo pipefail
 
-          IMAGE="${{ needs.build.outputs.digest_ref }}"
-          INSTANCE_ID="${{ secrets.EC2_INSTANCE_ID }}"
+          echo "${{ env.COMMIT_SHA }}" \
+            > "${{ env.PUBLISH_DIR }}/.commit-sha"
 
-          echo "deploying $IMAGE to $INSTANCE_ID"
+          echo "${{ steps.version.outputs.value }}" \
+            > "${{ env.PUBLISH_DIR }}/.version"
 
-          REGISTRY="${IMAGE%%/*}"
+          date -u +"%Y-%m-%dT%H:%M:%SZ" \
+            > "${{ env.PUBLISH_DIR }}/.deployed-at"
 
-          # Ship only deployment tooling and Compose.
-          BUNDLE_FILE="$RUNNER_TEMP/nomaos-deploy-bundle.tar.gz"
 
-          test -f deploy/scripts/deploy.sh
-          test -f deploy/scripts/lib.sh
-          test -f deploy/compose/docker-compose.app.yml
+          echo "===== Metadata ====="
 
-          tar -czf "$BUNDLE_FILE" \
-            deploy/scripts/deploy.sh \
-            deploy/scripts/lib.sh \
-            deploy/compose/docker-compose.app.yml
+          ls -la \
+            "${{ env.PUBLISH_DIR }}/.commit-sha" \
+            "${{ env.PUBLISH_DIR }}/.version" \
+            "${{ env.PUBLISH_DIR }}/.deployed-at"
 
-          BUNDLE_B64="$(base64 -w0 "$BUNDLE_FILE")"
-          BUNDLE_SHA256="$(sha256sum "$BUNDLE_FILE" | awk '{print $1}')"
+          echo ""
+          echo "===== SHA ====="
 
-          ####################################################################
-          # Build remote SSM command
-          ####################################################################
-          jq -n \
-            --arg image "$IMAGE" \
-            --arg sha "${{ github.sha }}" \
-            --arg app "${{ env.APP_NAME }}" \
-            --arg region "${{ env.AWS_REGION }}" \
-            --arg registry "$REGISTRY" \
-            --arg bundle_b64 "$BUNDLE_B64" \
-            --arg bundle_sha "$BUNDLE_SHA256" \
-            --arg run_id "${{ github.run_id }}" \
-            --arg run_attempt "${{ github.run_attempt }}" \
-            '{
-              executionTimeout: ["600"],
-              commands: [
-                (
-                  "IMAGE=" + ($image | @sh) + "\n" +
-                  "SHA=" + ($sha | @sh) + "\n" +
-                  "APP=" + ($app | @sh) + "\n" +
-                  "REGION=" + ($region | @sh) + "\n" +
-                  "REGISTRY=" + ($registry | @sh) + "\n" +
-                  "BUNDLE_B64=" + ($bundle_b64 | @sh) + "\n" +
-                  "BUNDLE_SHA256=" + ($bundle_sha | @sh) + "\n" +
-                  "RUN_ID=" + ($run_id | @sh) + "\n" +
-                  "RUN_ATTEMPT=" + ($run_attempt | @sh) + "\n" +
-                  "export IMAGE SHA APP REGION REGISTRY BUNDLE_B64 BUNDLE_SHA256 RUN_ID RUN_ATTEMPT\n" +
-                  "exec /bin/bash -lc " +
-                  (
-                    "set -euo pipefail\n" +
+          cat "${{ env.PUBLISH_DIR }}/.commit-sha"
 
-                    "APP_ENV_BASE=\"/opt/nomaos/env/$APP\"\n" +
 
-                    "if ! sudo test -r \"$APP_ENV_BASE.env\" && ! sudo test -r \"$APP_ENV_BASE.json\"; then\n" +
-                    "  echo \"missing required EC2 config: expected $APP_ENV_BASE.env or $APP_ENV_BASE.json\" >&2\n" +
-                    "  exit 1\n" +
-                    "fi\n" +
+      # =========================================================
+      # SSH AGENT
+      # =========================================================
 
-                    "DEPLOY_ROOT=/opt/nomaos/deploy-tools\n" +
-                    "DEPLOY_DIR=\"$DEPLOY_ROOT/$SHA-$RUN_ID-$RUN_ATTEMPT\"\n" +
-                    "BUNDLE_FILE=\"$DEPLOY_DIR/deploy-bundle.tar.gz\"\n" +
+      - name: 🔐 Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
 
-                    "sudo mkdir -p \"$DEPLOY_DIR\"\n" +
 
-                    "printf \"%s\" \"$BUNDLE_B64\" | " +
-                    "base64 --decode | " +
-                    "sudo tee \"$BUNDLE_FILE\" >/dev/null\n" +
+      # =========================================================
+      # TRUST EC2
+      # =========================================================
 
-                    "printf \"%s  %s\\n\" \"$BUNDLE_SHA256\" \"$BUNDLE_FILE\" | " +
-                    "sudo sha256sum --check --status || " +
-                    "{ echo \"deployment bundle checksum mismatch\" >&2; exit 1; }\n" +
-
-                    "sudo tar --no-same-owner -xzf \"$BUNDLE_FILE\" -C \"$DEPLOY_DIR\"\n" +
-
-                    "sudo rm -f \"$BUNDLE_FILE\"\n" +
-
-                    "DEPLOY_SCRIPT=\"$DEPLOY_DIR/deploy/scripts/deploy.sh\"\n" +
-                    "COMPOSE_FILE=\"$DEPLOY_DIR/deploy/compose/docker-compose.app.yml\"\n" +
-
-                    "sudo chmod +x \"$DEPLOY_SCRIPT\"\n" +
-
-                    "echo \"Image built from commit: $SHA\"\n" +
-                    "echo \"Deploy image:            $IMAGE\"\n" +
-                    "echo \"Deploy app:              $APP\"\n" +
-
-                    "test -f \"$DEPLOY_SCRIPT\" || " +
-                    "{ echo \"deployment helper missing: $DEPLOY_SCRIPT\" >&2; exit 1; }\n" +
-
-                    "test -f \"$DEPLOY_DIR/deploy/scripts/lib.sh\" || " +
-                    "{ echo \"shared deployment helper missing\" >&2; exit 1; }\n" +
-
-                    "test -f \"$COMPOSE_FILE\" || " +
-                    "{ echo \"Compose file missing: $COMPOSE_FILE\" >&2; exit 1; }\n" +
-
-                    "echo \"Validating EC2 configuration before ECR login\"\n" +
-
-                    "sudo /bin/bash \"$DEPLOY_SCRIPT\" " +
-                    "--app \"$APP\" " +
-                    "--image \"$IMAGE\" " +
-                    "--commit \"$SHA\" " +
-                    "--dry-run\n" +
-
-                    "cleanup_ecr_login() { " +
-                    "sudo docker logout \"$REGISTRY\" >/dev/null 2>&1 || true; " +
-                    "}\n" +
-
-                    "trap cleanup_ecr_login EXIT\n" +
-
-                    "aws ecr get-login-password --region \"$REGION\" | " +
-                    "sudo docker login " +
-                    "--username AWS " +
-                    "--password-stdin \"$REGISTRY\"\n" +
-
-                    "echo \"Starting deployment\"\n" +
-
-                    "sudo /bin/bash \"$DEPLOY_SCRIPT\" " +
-                    "--app \"$APP\" " +
-                    "--image \"$IMAGE\" " +
-                    "--commit \"$SHA\""
-                    | @sh
-                  )
-                )
-              ]
-            }' > /tmp/ssm-params.json
-
-          echo "Generated SSM parameters (bundle content omitted):"
-
-          jq '{
-            executionTimeout,
-            command_count: (.commands | length),
-            command_bytes: (.commands[0] | length)
-          }' /tmp/ssm-params.json
-
-          ####################################################################
-          # Send SSM command
-          ####################################################################
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy ${{ github.sha }}" \
-            --cloud-watch-output-config \
-              CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/nomaos/deploy \
-            --parameters file:///tmp/ssm-params.json \
-            --query "Command.CommandId" \
-            --output text)
-
-          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
-          echo "SSM command: $COMMAND_ID"
-
-          ####################################################################
-          # Poll SSM
-          ####################################################################
-          for i in $(seq 1 20); do
-
-            STATUS=$(aws ssm list-command-invocations \
-              --command-id "$COMMAND_ID" \
-              --details \
-              --query "CommandInvocations[0].Status" \
-              --output text 2>/dev/null || echo "Pending")
-
-            case "$STATUS" in
-
-              Success)
-                echo "deployment succeeded"
-
-                aws ssm list-command-invocations \
-                  --command-id "$COMMAND_ID" \
-                  --details \
-                  --query "CommandInvocations[0].CommandPlugins[0].Output" \
-                  --output text
-
-                exit 0
-                ;;
-
-              Failed|Cancelled|TimedOut)
-                echo "::error::deployment $STATUS"
-
-                aws ssm list-command-invocations \
-                  --command-id "$COMMAND_ID" \
-                  --details \
-                  --query "CommandInvocations[0].CommandPlugins[0].Output" \
-                  --output text
-
-                exit 1
-                ;;
-
-            esac
-
-            if [ $((i % 3)) -eq 0 ]; then
-              echo "  status: $STATUS ($((i * 5))s)"
-            fi
-
-            sleep 5
-          done
-
-          echo "::error::timed out waiting for the SSM command"
-          exit 1
-
-      ######################################################################
-      # PUBLIC HEALTH
-      ######################################################################
-      - name: Verify public health endpoint
-        continue-on-error: true
+      - name: 🔐 Trust EC2 host
         run: |
-          set -euo pipefail
 
-          URL="${{ vars.HEALTH_URL || 'https://dev-noma-api.nomaos.com/health/ready' }}"
+          mkdir -p ~/.ssh
 
-          echo "probing $URL"
+          chmod 700 ~/.ssh
 
-          for i in $(seq 1 5); do
+          ssh-keyscan -H \
+            "${{ secrets.EC2_HOST_DEV }}" \
+            >> ~/.ssh/known_hosts
 
-            CODE=$(curl \
-              -s \
-              -o /dev/null \
-              -w '%{http_code}' \
-              --max-time 5 \
-              "$URL" || echo 000)
+          chmod 644 ~/.ssh/known_hosts
 
-            if [ "$CODE" = "200" ]; then
-              echo "health check passed"
+
+      # =========================================================
+      # CREATE RELEASE DIRECTORY
+      # =========================================================
+
+      - name: 📁 Prepare release directory
+        run: |
+
+          ssh \
+            -o ConnectTimeout=10 \
+            ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
+
+
+      # =========================================================
+      # RSYNC DIRECTLY TO DEV EC2
+      #
+      # The publish directory is copied directly from the current
+      # runner to EC2.
+      #
+      # NO GitHub artifact.
+      # =========================================================
+
+      - name: 📡 Sync application to Dev EC2
+        id: rsync
+        run: |
+
+          START=$(date +%s)
+
+
+          rsync \
+            -az \
+            --delete \
+            --exclude='.git' \
+            --exclude='*.pdb' \
+            --exclude='*.xml' \
+            --timeout=30 \
+            --stats \
+            "${{ env.PUBLISH_DIR }}/" \
+            "ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/" \
+            2>&1 | tee rsync.log
+
+
+          EXIT_CODE=${PIPESTATUS[0]}
+
+
+          END=$(date +%s)
+
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "❌ Rsync failed"
+            exit "$EXIT_CODE"
+          fi
+
+
+          TRANSFERRED=$(
+            grep \
+              "Total transferred file size" \
+              rsync.log |
+            awk '{print $5, $6}' ||
+            echo "N/A"
+          )
+
+
+          {
+            echo "### 📡 File Transfer"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| ✅ Status | Success |"
+            echo "| 📦 Transferred | $TRANSFERRED |"
+            echo "| ⏱️ Duration | $((END - START))s |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      # =========================================================
+      # VERIFY REMOTE SHA
+      # =========================================================
+
+      - name: 🔎 Verify application on server
+        run: |
+
+          REMOTE_SHA=$(
+            ssh \
+              -o ConnectTimeout=10 \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null | tr -d '[:space:]' || echo NOT_FOUND"
+          )
+
+
+          echo "Expected SHA: ${{ env.COMMIT_SHA }}"
+          echo "Remote SHA:   $REMOTE_SHA"
+
+
+          if [ "$REMOTE_SHA" != "${{ env.COMMIT_SHA }}" ]; then
+
+            echo "❌ Remote SHA mismatch"
+
+            echo "===== Remote directory ====="
+
+            ssh \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              "ls -la /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/"
+
+            exit 1
+          fi
+
+
+          echo "✅ Remote SHA verified: $REMOTE_SHA"
+
+
+      # =========================================================
+      # DEPLOY
+      # =========================================================
+
+      - name: 🔄 Swap deployment slot
+        run: |
+
+          ssh \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            -o ConnectTimeout=10 \
+            ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
+
+
+          echo "✅ Slot swap complete"
+
+
+      # =========================================================
+      # HEALTH CHECK
+      # =========================================================
+
+      - name: ❤️ Health check
+        id: health
+        run: |
+
+          echo "⏳ Waiting 15 seconds for service to stabilise..."
+
+          sleep 15
+
+
+          for i in $(seq 1 10); do
+
+            HTTP_CODE=$(
+              curl \
+                -s \
+                -o /dev/null \
+                -w "%{http_code}" \
+                --max-time 5 \
+                https://dev-noma-api.nomaos.com/health ||
+              echo "000"
+            )
+
+
+            if [ "$HTTP_CODE" = "200" ]; then
+
+              echo "✅ Healthy (attempt $i) — HTTP $HTTP_CODE"
+
+              printf 'health_status=healthy\n' \
+                >> "$GITHUB_OUTPUT"
+
               exit 0
+
             fi
 
-            echo "  attempt $i/5 -> HTTP $CODE"
 
-            sleep 5
+            echo "[$i/10] HTTP $HTTP_CODE — retrying in 10s..."
+
+            sleep 10
+
           done
 
-          echo "::warning::public /health did not return 200 — check the active slot manually"
 
-      ######################################################################
-      # SUMMARY
-      ######################################################################
-      - name: Summary
+          printf 'health_status=unhealthy\n' \
+            >> "$GITHUB_OUTPUT"
+
+
+          echo "❌ Health check failed after 10 attempts"
+
+          exit 1
+        continue-on-error: true
+
+
+      # =========================================================
+      # DEPLOYMENT SUMMARY
+      # =========================================================
+
+      - name: 📋 Deployment Summary
+        if: always()
+        env:
+          HEALTH: ${{ steps.health.outputs.health_status }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+
+          HEALTH_ICON=$(
+            [ "$HEALTH" = "healthy" ] &&
+              echo "✅" ||
+              echo "❌"
+          )
+
+
+          {
+            echo "## 🚀 Deployment Summary"
+            echo ""
+            echo "| Key | Value |"
+            echo "|-----|-------|"
+            echo "| 📦 Version | \`$VERSION\` |"
+            echo "| 🔖 Commit | \`${{ env.COMMIT_SHA }}\` |"
+            echo "| 🌍 Environment | \`dev\` |"
+            echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"
+            echo "| 🕐 Deployed At | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |"
+            echo "| 🔗 URL | https://dev-noma-api.nomaos.com/health |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      # =========================================================
+      # CLEAN LOCAL FILES
+      # =========================================================
+
+      - name: 🧹 Clean runner
         if: always()
         run: |
-          {
-            echo "### Deployment"
-            echo ""
-            echo "| Field | Value |"
-            echo "|---|---|"
-            echo "| App | \`${{ env.APP_NAME }}\` |"
-            echo "| Image | \`${{ needs.build.outputs.image }}\` |"
-            echo "| Commit | \`${{ github.sha }}\` |"
-            echo "| Actor | \`${{ github.actor }}\` |"
-            echo "| Result | ${{ job.status }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
+
+          rm -rf "${{ env.PUBLISH_DIR }}"
+          rm -rf ./TestResults
+
+          echo "✅ Local build files cleaned"
