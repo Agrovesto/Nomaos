@@ -1134,13 +1134,15 @@ SELECT
                 })
                 .FirstOrDefaultAsync();
 
-            // Subscriptions that reached Disbursed or a later lifecycle stage.
-            // TotalInputDisbursed      = how many such subscriptions there are (a membership can appear more than once).
-            // TotalFinanced            = how much (sum of TotalFinancingValue) across those same subscriptions.
-            // TotalFinancedMemberships = how many DISTINCT memberships received at least one of those disbursements
-            //                            (e.g. 10 subscriptions could still be only 5 distinct memberships if some
-            //                            were financed more than once).
-            var disbursedStats = await _context.InputPackageSubscriptions
+
+
+           // Subscriptions that reached Disbursed or a later lifecycle stage.
+           // TotalInputDisbursed      = how many such subscriptions there are (a membership can appear more than once).
+           // TotalFinanced            = how much (sum of TotalFinancingValue) across those same subscriptions.
+           // TotalFinancedMemberships = how many DISTINCT memberships received at least one of those disbursements
+           //                            (e.g. 10 subscriptions could still be only 5 distinct memberships if some
+           //                            were financed more than once).
+           var disbursedStats = await _context.InputPackageSubscriptions
                 .AsNoTracking()
                 .Where(s => s.OrganizationId == organization.OrganizationId
                          && s.SubscriberType == InputSubScriptionType.MemberShip
@@ -1384,37 +1386,64 @@ SELECT
                 .AsNoTracking()
                 .Where(oa => oa.OrganizationId == args.Id && oa.IsActive);
 
+            var hasRequestUserId = !string.IsNullOrWhiteSpace(args.RequestUserId);
+            var hasRequestModule = !string.IsNullOrWhiteSpace(args.RequestModule);
+
+            // Both must be supplied together, otherwise the exclusion filter would be silently skipped
+            if (hasRequestUserId != hasRequestModule)
+            {
+                throw new ValidationException("RequestUserId and RequestModule must be supplied together.");
+            }
+
             // Exclude agents already assigned to the requesting farmer / membership
-            if (!string.IsNullOrWhiteSpace(args.RequestUserId) && !string.IsNullOrWhiteSpace(args.RequestModule))
+            if (hasRequestUserId && hasRequestModule)
             {
                 var module = args.RequestModule.Trim();
-                var requestUserId = args.RequestUserId;
+                var requestUserId = args.RequestUserId.Trim();
+
+                List<long> assignedAgentIds;
 
                 if (module.Equals("Farmer", StringComparison.OrdinalIgnoreCase))
                 {
-                    if(string.IsNullOrWhiteSpace(args.organizationCode))
+                    if (string.IsNullOrWhiteSpace(args.organizationCode))
                     {
                         throw new ValidationException("Organization code is required for Farmer module.");
                     }
-                    orgAgentsQuery = orgAgentsQuery.Where(oa =>
-                        !(from fa in _context.FarmerAgents
-                          join f in _context.Farmers on fa.FarmerId equals f.Id
-                          where f.UserId == requestUserId
-                                && fa.OrganizationCode == args.organizationCode
-                                && fa.IsActive
-                                && fa.AgentId == oa.AgentId
-                          select fa.Id).Any());
+
+                    assignedAgentIds = await (
+                        from fa in _context.FarmerAgents.AsNoTracking()
+                        join f in _context.Farmers.AsNoTracking() on fa.FarmerId equals f.Id
+                        where f.UserId == requestUserId
+                              && fa.OrganizationCode == args.organizationCode
+                              && fa.IsActive
+                        select fa.AgentId)
+                        .Distinct()
+                        .ToListAsync();
                 }
                 else if (module.Equals("MemberShip", StringComparison.OrdinalIgnoreCase))
                 {
-                    orgAgentsQuery = orgAgentsQuery.Where(oa =>
-                        !(from ma in _context.MemberShipAgents
-                          join m in _context.MemberShips on ma.MemberShipId equals m.Id
-                          where m.UserId == requestUserId
-                               // && ma.OrganizationId == args.Id
-                                && ma.IsActive
-                                && ma.AgentId == oa.AgentId
-                          select ma.Id).Any());
+                    assignedAgentIds = await (
+                        from ma in _context.MemberShipAgents.AsNoTracking()
+                        join m in _context.MemberShips.AsNoTracking() on ma.MemberShipId equals m.Id
+                        where m.UserId == requestUserId
+                              // && ma.OrganizationId == args.Id
+                              && ma.IsActive
+                        select ma.AgentId)
+                        .Distinct()
+                        .ToListAsync();
+                }
+                else
+                {
+                    throw new ValidationException($"Unsupported request module '{args.RequestModule}'.");
+                }
+
+                //_logger.LogInformation(
+                //    "GetOrganizationAgents: Module={Module}, RequestUserId={UserId}, OrgId={OrgId}, ExcludedAgents={Count}",
+                //    module, requestUserId, args.Id, assignedAgentIds.Count);
+
+                if (assignedAgentIds.Count > 0)
+                {
+                    orgAgentsQuery = orgAgentsQuery.Where(oa => !assignedAgentIds.Contains(oa.AgentId));
                 }
             }
 
@@ -1473,6 +1502,7 @@ SELECT
                 .ToDictionary(g => g.Key, g => g.Select(x => x.LocationId).Distinct().Count());
 
             var orgAgentIds = orgAgentRows.Select(x => x.Id).ToList();
+
             var roleCounts = await _context.OrganizationAgentRoles
                 .AsNoTracking()
                 .Where(r => orgAgentIds.Contains(r.OrganizationAgentId))
@@ -1503,7 +1533,7 @@ SELECT
                 InputDisbursed = 0,
                 EquityPaid = 0,
                 ProductSold = 0,
-                Status=a.IsActive
+                Status = a.IsActive
             }).ToList();
 
             return new PagedListResponse<List<OrganizationAgentResponse>>
@@ -1515,6 +1545,8 @@ SELECT
                 Succeeded = true
             };
         }
+
+
         #region Location
 
         private async Task ValidateModules(List<long> moduleIds)

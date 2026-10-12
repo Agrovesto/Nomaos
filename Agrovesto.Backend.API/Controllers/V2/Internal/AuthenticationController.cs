@@ -206,7 +206,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("resend-otp")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
-        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
+        //Todo:rework to remove usertype
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] VerificationArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -262,7 +263,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
             result => Ok(Success(result, ResponseMessages.Successful)));
         }
+        [AllowAnonymous]
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var result = await _onBoardingManager.RefreshToken(request.RefreshToken, ip);
 
+            return result.Status ? Ok(result.Response) : Unauthorized(new { message = result.Message });
+        }
         [HttpPost("login")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
@@ -270,9 +279,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
             return await ExecuteAsync(
-                () => _onBoardingManager.Login(model, businessCode),
+                () => _onBoardingManager.Login(model, businessCode, ip),
                 createUser =>
                 {
                     var response = new Response<TokenModel>
@@ -424,6 +434,24 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             };
 
             var (status, message) = await _onBoardingManager.ForgotCredential(model);
+            return Ok(new { status, message });
+        }
+        [HttpPost("resend-credential")]
+        [AllowPendingCredentialChange]
+        public async Task<IActionResult> ResendCredential([FromBody] ForgotCredentialRequest request,
+            [FromQuery] string businessCode,
+            [FromQuery] string env)
+        {
+            var model = new ForgotCredentialModel
+            {
+                Type = request.Type,
+                Email = request.Email,
+                PhoneNumber = request.PhoneNumber,
+                BusinessCode = businessCode,
+                Env = env
+            };
+
+            var (status, message) = await _onBoardingManager.ResendCredentialAsync(model);
             return Ok(new { status, message });
         }
         [HttpPost("reset-credential")]

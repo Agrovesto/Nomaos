@@ -683,22 +683,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var schedule = new List<RepaymentScheduleDto>();
 
-            if (plan ==null)
+            if (plan == null || !plan.RepaymentStartDate.HasValue || plan.RepaymentDuration <= 0)
                 return schedule;
 
             int duration = plan.RepaymentDuration;
+            var start = plan.RepaymentStartDate.Value;
 
             decimal baseAmount = Math.Floor(plan.RepaymentValue / duration * 100m) / 100m;
             decimal lastAmount = plan.RepaymentValue - (baseAmount * (duration - 1));
-
-            var start = plan.RepaymentStartDate.Value;
 
             for (int i = 1; i <= duration; i++)
             {
                 var dueDate = GetDueDate(start, plan.RepaymentFrequency, i);
                 var amount = (i == duration) ? lastAmount : baseAmount;
                 var grace = plan.RepaymentGracePeriod.HasValue
-                    ? EndOfMonth(dueDate.AddMonths(1)) 
+                    ? EndOfMonth(dueDate.AddMonths(1))
                     : (DateTimeOffset?)null;
 
                 schedule.Add(new RepaymentScheduleDto
@@ -739,7 +738,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 IsActive = package.IsActive,
                 WalletProviderId = package.WalletProviderId ?? 0,
-
+                CreatedBy= package.CreatedByUserId,
                 Id = package.Id,
                 Name = package.Name,
                 IsRepaymentWalletConfigured = package.IsSelectedWalletProvisioned,
@@ -747,7 +746,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 SubscriptionType = EnumExtensions.GetDisplayName(package.SubScriptionType),
                 InputSeason = package.InputSeason,
                 InputTarget = package.InputTarget,
-
+                
                 FinancingCategory = package.InputFinancingCategory?.Name,
 
                 FinancialStructure = new InputPackageFinancingStructureDto
@@ -1911,9 +1910,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     x.Status == TransactionStatus.Successful)
                 .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
 
-            var fullyRepaid = !subscription.InputPackage.RepaymentRequired
-         || subscription.RepaymentValue <= 0
-         || totalRepaid >= subscription.RepaymentValue;
+            var fullyRepaid = totalRepaid >= subscription.RepaymentValue;
             if (fullyRepaid 
                 //&& (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
                 //SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active)
@@ -1954,6 +1951,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         IsCompleted = fullyRepaid
                     })
             });
+
+            await _context.SaveChangesAsync();
+
         }
 
         public async Task<decimal> GetTotalRepaymentPaidAsync(long subscriptionId)

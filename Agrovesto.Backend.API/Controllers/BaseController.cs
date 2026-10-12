@@ -463,6 +463,24 @@ namespace Agrovesto.Backend.API.Controllers
                 }
             }
         }
+        // Raw claim value (string)
+        private string? CurrentBusinessIdRaw =>
+            TryReadJwt()?
+                .Claims.FirstOrDefault(x => x.Type.Equals("BusinessId", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+
+        // Typed, nullable: null if the claim is missing or not a valid number
+        public long? CurrentBusinessId =>
+            long.TryParse(CurrentBusinessIdRaw, out var id) ? id : null;
+
+        // For endpoints that can't work without it
+        protected long RequireBusinessId()
+        {
+            var id = CurrentBusinessId;
+            if (id is null)
+                throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
+            return id.Value;
+        }
         public string Token
         {
             get

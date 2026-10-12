@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
-    public class Role : IdentityRole
+    public class Role : IdentityRole<string>
     {
         public Role()
         {
@@ -21,12 +21,15 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         }
         public string Descriptions { get; set; }
         public bool IsAvailableToBusiness { get; set; }
+        public bool IsAvailableToAdmin { get; set; } = false;
         //add permission
 
         /// <summary>   
         /// Navigation property for the users in this role.
+        /// Uses the application's custom join entity so the model doesn't include
+        /// the base IdentityUserRole<string> type.
         /// </summary>
-        public virtual ICollection<IdentityUserRole<string>> Users { get; set; } = new List<IdentityUserRole<string>>();
+        public virtual ICollection<ApplicationUserRole> Users { get; set; } = new List<ApplicationUserRole>();
 
         /// <summary>
         /// Navigation property for claims in this role.
@@ -35,5 +38,21 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
 
         public long? BusinessId { get; set; }
         public Business Business { get; set; }
+
+        public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
+
+        public ICollection<ApplicationUserRole> UserRoles { get; set; } = new List<ApplicationUserRole>();
+    }
+
+    public class ApplicationUserRole : IdentityUserRole<string>
+    {
+        public long BusinessId { get; set; }
+
+        // Initialised to true because `new ApplicationUserRole()` is what creates rows.
+        public bool IsActive { get; set; } = true;
+
+        public User User { get; set; } = default!;
+        public Role Role { get; set; } = default!;
+        public Business Business { get; set; } = default!;
     }
 }

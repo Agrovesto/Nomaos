@@ -36,6 +36,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? RegistrationNumber { get; set; } //CAC
         public string? MembershipLeaderFirstName { get; set; }
         public string? MembershipLeaderMiddleName { get; set; }
         public string? MembershipLeaderLastName { get; set; }
@@ -52,7 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool HasbeenAssignedAgent { get; set; }
        // public string? OrganizationCode { get; set; }
         public string? OnboardedById { get; set; }
-        public Tier TierLevel { get; set; }
+        public Tier TierLevel { get; set; } = Tier.None;
         public long MemberShipTypeId { get; set; }
         public MemberShipType MemberShipType { get; set; }
         public bool IsActive { get; set; } = true;

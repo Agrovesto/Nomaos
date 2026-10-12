@@ -1,6 +1,7 @@
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Admin;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -9,8 +10,12 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Runtime.Internal.Util;
 using DocumentFormat.OpenXml.Spreadsheet;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.SqlClient;
@@ -30,6 +35,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using FarmerPersonalInfoDto = Agrovesto.Backend.Core.Models.Businesses.FarmerPersonalInfoDto;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
@@ -40,7 +46,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
         Task<(UserModel model, bool status, string message)> OnRegistrationAsync(UserModel model, string roleName);
         Task RemoveUserFromOrganization(string userId, string organizationCode);
-        Task TrackUserRoleAssignment(string userId, string userType) ;
+        Task TrackUserRoleAssignment(string userId, string userType, string roleId, long businessId) ;
         Task<List<string>> GetOrganizationsForUser(string userId);
         Task<List<User>> GetUsersInOrganization(string organizationCode);
         Task<(UserModel model, bool status, string message)> GetUserById(string userId);
@@ -51,8 +57,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task AddUserToOrganizationAsync(User user, string organizationCode, string phoneNumber);
         Task<CreateUserResult> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId, OneTimePassword otp);
-       // Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model);
+        // Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
+        Task<(bool Status, string Message, TokenModel Response)> Login(
+                LoginModel model, string ipAddress = null);
         //Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level);
         Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified);
         Task OnCreateKYC(KYCDetails kYC);
@@ -69,25 +76,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> ValidateUserPinAsync(string userId, string plainPin);
         Task<bool> IsRevokedAsync(string jti);
         Task RevokeAsync(string jti, string userId, DateTime tokenExpiry);
-        Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
-        Task<CreateUserResult> CreateNewUser(OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
-        Task<IdentityRole> GetRoleAsync(string roleName);
+        Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, Role role);
+        Task<CreateUserResult> CreateNewUser(OnboardingRequestModel model, OnBoardingArgs args, Role role);
+        Task<Role> GetRoleAsync(string roleName);
         Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work);
         Task<UserModel> OnUpdateUserProfileAsync(string userId, ProfileRequestModel model, string modifiedBy = null);
+        Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string ipAddress = null);
+        Task LogoutAsync(string userId, string jti, DateTime accessTokenExpiry, string? sessionId);
+        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string userAgent);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
+     
+        private const string OrganizationRole = "Organization";
         private readonly DataContext _context;
         private readonly RoleManager<Role> _roleManager;
         private readonly UserManager<User> _userManager;
         private readonly SignInManager<User> _signInManager;
         private readonly IConfiguration _configuration;
         private readonly ILogger<OnboardingRepository> _log;
+        private readonly IClientInfoProvider _client;
         public OnboardingRepository(DataContext context,
             SignInManager<User> signInManager,
 
         IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
-            ILogger<OnboardingRepository> log)
+            ILogger<OnboardingRepository> log, IClientInfoProvider client)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -95,6 +108,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
             _signInManager = signInManager;
+            _client = client;
         }
         public async Task RevokeAsync(string jti, string userId, DateTime tokenExpiry)
         {
@@ -187,6 +201,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         UserBusiness activeBusiness,
         List<OrganizationDto>? organizations,
         bool hasPendingOnboarding,
+         string sessionId,
         List<string>? modules = null,
         bool requiresCredentialChange = false)
         {
@@ -198,7 +213,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         new Claim(JwtRegisteredClaimNames.Sub, user.Id),
         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         new Claim(ClaimTypes.NameIdentifier, user.Id),
-
+          new Claim("SessionId", sessionId), 
         // Business info
         new Claim("BusinessId", activeBusiness.BusinessId.ToString()),
         new Claim("BusinessCode", activeBusiness.Business?.BusinessCode ?? ""),
@@ -226,6 +241,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
                 claims.Add(new Claim(ClaimTypes.MobilePhone, user.PhoneNumber));
+
+           
             claims.Add(new Claim(
                 "DisplayName",
                 user.Name ??
@@ -306,13 +323,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return (false, null);
         }
+       
+        
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
-        LoginModel model)
+        LoginModel model, string ipAddress = null)
         {
             var user = await ResolveUserAsync(model);
             if (user == null)
                 return (false, "Invalid credentials", null);
-            
+
             var credentialResult = await ValidateCredentialsAsync(user, model);
             if (!credentialResult.Success)
                 return (false, credentialResult.Message, null);
@@ -328,23 +347,169 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 return (false, "User is not assigned to any business", null);
 
             UserBusiness activeBusiness;
-
-
             if (!string.IsNullOrWhiteSpace(model.BusinessCode))
             {
                 activeBusiness = userBusinesses
                     .FirstOrDefault(x => x.Business.BusinessCode == model.BusinessCode);
 
                 if (activeBusiness == null)
-                    return (false, "Access denied: you do not has access to this platform", null);
+                    return (false, "Access denied: you do not have access to this platform", null);
             }
             else
             {
                 activeBusiness = userBusinesses.FirstOrDefault(x => x.IsDefault)
-                                  ?? userBusinesses.First();
+                                 ?? userBusinesses.First();
             }
 
-            var roles = await _userManager.GetRolesAsync(user);
+            var tokens = await IssueTokensAsync(
+                user,
+                activeBusiness,
+                weakCredentialResult.IsWeak,
+                weakCredentialResult.Message,
+                familyId: Guid.NewGuid().ToString("N"),
+                ipAddress);
+
+            return (true, "Successful", tokens);
+        }
+
+
+        public async Task<(bool Status, string Message, TokenModel Response)> RefreshToken(
+          string refreshToken, string ipAddress = null)
+        {
+            const string invalid = "Invalid or expired refresh token";
+
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return (false, invalid, null);
+
+            var hash = HashToken(refreshToken);
+            var stored = await _context.RefreshTokens.FirstOrDefaultAsync(x => x.TokenHash == hash);
+
+            if (stored == null)
+                return (false, invalid, null);
+
+            // A revoked token being presented again = possible theft -> kill the whole family
+            if (stored.RevokedOn != null)
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "Reuse detected");
+                return (false, invalid, null);
+            }
+
+            if (stored.ExpiresOn <= DateTime.UtcNow)
+                return (false, invalid, null);
+
+            var user = await _userManager.FindByIdAsync(stored.UserId);
+            if (user == null || await _userManager.IsLockedOutAsync(user))
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "User unavailable");
+                return (false, invalid, null);
+            }
+
+            var activeBusiness = await _context.UserBusinesses
+                .Include(x => x.Business)
+                .FirstOrDefaultAsync(x => x.UserId == user.Id
+                                       && x.BusinessId == stored.BusinessId
+                                       && x.IsActive);
+
+            if (activeBusiness == null)
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "Business access removed");
+                return (false, invalid, null);
+            }
+
+            // ADMIN: re-validate admin sessions against the database on every refresh, BEFORE rotating.
+            // Permissions are re-read here, so a role or permission change takes effect at the next refresh.
+            AdminAccess? adminAccess = null;
+
+            if (stored.IsAdminSession)
+            {
+                // ASSUMPTION: same "account is active" property used in AdminLogin. Remove if you don't have one.
+                if (!user.IsActive)
+                {
+                    await RevokeFamilyAsync(stored.FamilyId, "Admin account inactive");
+                    return (false, invalid, null);
+                }
+
+                adminAccess = await GetAdminAccessAsync(user.Id, stored.BusinessId);
+
+                if (!adminAccess.HasAccess)
+                {
+                    await RevokeFamilyAsync(stored.FamilyId, "Admin access removed");
+                    return (false, invalid, null);
+                }
+            }
+
+            // Atomic rotation: only one concurrent request can win this update
+            var rows = await _context.RefreshTokens
+                .Where(x => x.Id == stored.Id && x.RevokedOn == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(x => x.RevokedReason, "Rotated"));
+
+            if (rows == 0)
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "Concurrent reuse");
+                return (false, invalid, null);
+            }
+
+            var tokens = await IssueTokensAsync(
+                user,
+                activeBusiness,
+                stored.RequiresCredentialChange,   // carried forward; we can't re-check the password here
+                stored.RequiresCredentialChange
+                    ? "Your credentials are weak or default. Please change them for security."
+                    : null,
+                stored.FamilyId,
+                ipAddress,
+                adminAccess);                      // ADMIN: null for normal sessions; IssueTokensAsync copies IsAdminSession onto the new row
+
+            return (true, "Successful", tokens);
+        }
+
+        public async Task RevokeAllForUserAsync(string userId, string reason)
+        {
+            await _context.RefreshTokens
+                .Where(x => x.UserId == userId && x.RevokedOn == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(x => x.RevokedReason, reason));
+        }
+
+        public async Task LogoutAsync(string userId, string jti, DateTime accessTokenExpiry, string? sessionId)
+        {
+            // 1. Kill the current access token right away (existing mechanism)
+            await RevokeAsync(jti, userId, accessTokenExpiry);
+
+            // 2. Kill the refresh tokens for this login session so it can't be refreshed
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                await _context.RefreshTokens
+                    .Where(x => x.UserId == userId && x.FamilyId == sessionId && x.RevokedOn == null)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                        .SetProperty(x => x.RevokedReason, "Logout"));
+            }
+        }
+
+        private Task RevokeFamilyAsync(string familyId, string reason) =>
+            _context.RefreshTokens
+                .Where(x => x.FamilyId == familyId && x.RevokedOn == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(x => x.RevokedReason, reason));
+
+        private async Task<TokenModel> IssueTokensAsync(
+         User user,
+         UserBusiness activeBusiness,
+         bool requiresCredentialChange,
+         string securityNotice,
+         string familyId,
+         string ipAddress,
+         AdminAccess? adminAccess = null)                                  // ADMIN: new, optional
+        {
+            // ADMIN: business-scoped, active-only roles for admin sessions
+            IList<string> roles = adminAccess != null
+                ? adminAccess.Roles
+                : await _userManager.GetRolesAsync(user);
 
             var organizations = await (from uo in _context.UserOrganizations
                                        join bo in _context.Organizations
@@ -356,50 +521,96 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                                            OrganizationName = bo.CompanyName
                                        }).ToListAsync();
 
-            var hasPendingOnboarding =
+            // ADMIN: don't trap staff in the onboarding flow
+            var hasPendingOnboarding = adminAccess == null && (
                 string.IsNullOrWhiteSpace(user.Email) ||
                 string.IsNullOrWhiteSpace(user.PhoneNumber) ||
-                string.IsNullOrWhiteSpace(user.UserType);
+                string.IsNullOrWhiteSpace(user.UserType));
 
             var modules = await _context.BusinessLicenseModules
-                .Where(x =>
-                    x.BusinessLicense.BusinessId == activeBusiness.BusinessId &&
-                    x.IsEnabled)
+                .Where(x => x.BusinessLicense.BusinessId == activeBusiness.BusinessId && x.IsEnabled)
                 .Select(x => x.SystemModule.Code)
                 .ToListAsync();
 
-            var claims = BuildClaims(
-                user,
-                roles,
-                activeBusiness,   
-                organizations,
-                hasPendingOnboarding,
-                modules,
-                weakCredentialResult.IsWeak
-            );
+            // .ToList() so we can append (works whether BuildClaims returns List, array or IEnumerable)
+            var claims = BuildClaims(user, roles, activeBusiness, organizations,
+                                     hasPendingOnboarding, familyId, modules, requiresCredentialChange)
+                         .ToList();
 
-            var expiration = DateTime.UtcNow.AddHours(1);
-            var token = GenerateJwtToken(claims, expiration);
-            return (true, "Successful", new TokenModel
+            // ADMIN: permission claims (one claim per permission; the JWT stores them as an array)
+            if (adminAccess != null)
             {
+                claims.AddRange(adminAccess.Permissions
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(p => new Claim(AdminPermissions.ClaimType, p)));
+
+                claims.Add(new Claim("portal", "admin"));
+            }
+
+            var accessExpiry = DateTime.UtcNow.Add(GetAccessTokenLifetime(roles));
+            var accessToken = GenerateJwtToken(claims, accessExpiry);
+
+            // Refresh token
+            var rawRefresh = GenerateRefreshTokenValue();
+            var refreshDays = _configuration.GetValue("JWT:RefreshTokenDays", 7);
+            var refreshExpiry = DateTime.UtcNow.AddDays(refreshDays);
+
+            _context.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = user.Id,
+                BusinessId = activeBusiness.BusinessId,
+                TokenHash = HashToken(rawRefresh),
+                FamilyId = familyId,
+                CreatedOn = DateTime.UtcNow,
+                ExpiresOn = refreshExpiry,
+                RequiresCredentialChange = requiresCredentialChange,
+                CreatedByIp = ipAddress,
+                IsAdminSession = adminAccess != null                            // ADMIN: remember the session type
+            });
+
+            user.LastLoginDate = DateTimeOffset.UtcNow;
+
+      
+            await _context.SaveChangesAsync();
+
+            return new TokenModel
+            {
+                Permissions = adminAccess?.Permissions ?? new List<string>(),
                 Id = user.Id,
                 Email = user.Email,
                 Name = user.Name,
-                ExpiresOn= expiration,
-                Token = token,
+                ExpiresOn = accessExpiry,
+                Token = accessToken,
+                RefreshToken = rawRefresh,
+                RefreshTokenExpiresOn = refreshExpiry,
                 Roles = roles.ToList(),
-                Organizations= organizations,
+                Organizations = organizations,
                 phone_number = user.PhoneNumber,
-                TokenType =TokenType.AccessToken,
+                TokenType = TokenType.AccessToken,
                 BusinessCode = activeBusiness.Business.BusinessCode,
-                SecurityNotice = weakCredentialResult.Message,
-                Authmethod=user.SignupMethod.ToString(),
-                RequiresCredentialChange= weakCredentialResult.IsWeak,
-                TwoFactorEnabled= false
-            });
-        } 
-        
-         private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
+                SecurityNotice = securityNotice,
+                Authmethod = user.SignupMethod.ToString(),
+                RequiresCredentialChange = requiresCredentialChange,
+                TwoFactorEnabled = false
+            };
+        }
+        private TimeSpan GetAccessTokenLifetime(IEnumerable<string> roles)
+        {
+            var isOrganization = roles.Any(r =>
+                string.Equals(r, OrganizationRole, StringComparison.OrdinalIgnoreCase));
+
+            return isOrganization
+                ? TimeSpan.FromMinutes(_configuration.GetValue("JWT:OrganizationAccessTokenMinutes", 30))
+                : TimeSpan.FromMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
+        }
+
+        private static string GenerateRefreshTokenValue() =>
+            Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
+                .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+        private static string HashToken(string token) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+        private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
         User user,
         LoginModel model)
         {
@@ -485,6 +696,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     u.Name,
                     u.NIN,
                     u.BVN,
+                    u.IsBvnVerified,
+                    u.IsNinVerified,
+                    
                     Kyc = kyc 
                 })
                 .AsNoTracking()
@@ -517,6 +731,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 NIN = userWithKyc.NIN,
                 BVN = userWithKyc.BVN,
                 Roles = roles,
+                IsNinVerified=userWithKyc.IsNinVerified,
+                IsBvnVerified=userWithKyc.IsBvnVerified,
                 KYC = userWithKyc.Kyc == null ? null : new KYCDto
                 {
                     NIN = userWithKyc.Kyc.Number,
@@ -542,6 +758,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 where ur.UserId == userId
                 select r.Name 
             ).ToListAsync();
+            var (firstName, middleName, lastName, fullName) = ResolveDisplayName(user);
 
             var response = new UsersProfileResponse
             {
@@ -549,16 +766,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = user.UserType,
                 Email = user.Email,
                 Phone = user.PhoneNumber,
-                IsEmailVerified=user.IsEmailVerified,
-                IsPhoneVerified= user.IsPhoneVerified,
+                FirstName = firstName,
+                MiddleName = middleName,
+                LastName = lastName,
+                Name = fullName,
+                IsEmailVerified = user.IsEmailVerified,
+                IsPhoneVerified = user.IsPhoneVerified,
                 NIN = user.NIN,
                 BVN = user.BVN,
-                DateOfBirth= user.DateOfBirth,
-                IsBvnVerified=user.IsBvnVerified,
-                IsNinVerified=user.IsNinVerified,
+                DateOfBirth = user.DateOfBirth,
+                IsBvnVerified = user.IsBvnVerified,
+                IsNinVerified = user.IsNinVerified,
+                Gender=user?.Gender,
                 Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
             };
-
             var allRoleTypes = new List<string> { user.UserType };
             allRoleTypes.AddRange(additionalRoles);
             allRoleTypes = allRoleTypes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -715,13 +936,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Select(o => o.OrganizationEmail)
                 .FirstOrDefaultAsync();
         }
+        private static (string? First, string? Middle, string? Last, string? Full) ResolveDisplayName(User user)
+        {
+            var first = string.IsNullOrWhiteSpace(user.FirstName) ? null : user.FirstName.Trim();
+            var middle = string.IsNullOrWhiteSpace(user.MiddleName) ? null : user.MiddleName.Trim();
+            var last = string.IsNullOrWhiteSpace(user.LastName) ? null : user.LastName.Trim();
+
+            // Preferred: build from the parts
+            var fromParts = string.Join(" ", new[] { first, middle, last }.Where(x => x != null));
+            if (!string.IsNullOrWhiteSpace(fromParts))
+                return (first, middle, last, fromParts);
+
+            // Fallback: legacy Name column, split so the parts aren't empty in the response
+            if (!string.IsNullOrWhiteSpace(user.Name))
+            {
+                var (f, m, l) = MigrationNameSplitter.Split(user.Name);
+                return (f, m, l, user.Name.Trim());
+            }
+
+            // Nothing available
+            return (null, null, null, null);
+        }
         private async Task PopulateRoleProfile(UsersProfileResponse response, string roleType, string userId)
         {
             switch (roleType)
             {
                 case "Farmer":
                     response.Farmer = await GetFarmerProfile(userId);
-                    response.Name = response.Farmer?.PersonalInformation?.Name ?? response.Name;
+                   // response.Name = response.Farmer?.PersonalInformation?.Name ?? response.Name;
                     response.Gender = response.Farmer?.PersonalInformation.Gender ?? "NA";
                     response.Email = !string.IsNullOrWhiteSpace(response.Farmer?.PersonalInformation?.Email)
                         ? response.Farmer.PersonalInformation.Email
@@ -730,10 +972,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 case "Agent":
                     response.Agent = await GetAgentProfile(userId);
-                    response.Name = response.Agent?.Name ?? response.Name;
+                   // response.Name = response.Agent?.Name ?? response.Name;
                     response.Email = !string.IsNullOrWhiteSpace(response.Agent?.Email)
                         ? response.Agent.Email
                         : response.Email;
+                    response.Gender= response.Gender ?? "NA"; // Assuming Agent model doesn't have gender, so we keep existing gender or set to "NA"
                     break;
 
                 case "MemberShip":
@@ -746,7 +989,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 case "Organization":
                     response.Organization = await GetOrganizationProfile(userId); // fixed: was overwriting Membership
-                    response.Name = response.Organization?.OrganizationName ?? response.Name;
+                    //response.Name = response.Organization?.OrganizationName ?? response.Name;
                     response.Email = !string.IsNullOrWhiteSpace(response.Organization?.OrganizationEmail)
                         ? response.Organization.OrganizationEmail
                         : response.Email;
@@ -761,6 +1004,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var organization = await _context.Organizations
                 .Include(x=>x.State)
                 .Include(x => x.LGA)
+                .Include(x => x.Ward)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(o => o.UserId == userId);
             if (organization == null)
@@ -775,8 +1019,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 State = organization.State?.State,
                 Lga = organization.LGA?.Name,
                 Location = organization.CompanyAddress,
-                OnboardedOn=organization.OnboardedOn
-             
+                OnboardedOn=organization.OnboardedOn,
+                Ward=organization.Ward?.Name,
+
             };
             return profile;
         }
@@ -870,6 +1115,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private async Task<MemberShipModel> GetCooperativeProfile(string userId)
         {
              var memberShip = await _context.MemberShips
+                .Include(x=>x.MemberShipType)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.UserId == userId);
 
@@ -926,10 +1172,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
 
             var resolvedName = !string.IsNullOrWhiteSpace(model.FullName)
-        ? model.FullName
-        : string.Join(" ",
-            new[] { model.FirstName, model.MiddleName, model.LastName }
-                .Where(x => !string.IsNullOrWhiteSpace(x)));
+       ? model.FullName
+       : string.Join(" ",
+           new[] { model.FirstName, model.MiddleName, model.LastName }
+               .Where(x => !string.IsNullOrWhiteSpace(x)));
 
             if (!string.IsNullOrWhiteSpace(resolvedName))
             {
@@ -945,15 +1191,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         "legal name-change document) to request a name update.");
                 }
 
+                // Work out the parts: use what the client sent if present, otherwise split the full name
+                string first;
+                string? middle, last;
+
+                if (!string.IsNullOrWhiteSpace(model.FirstName) || !string.IsNullOrWhiteSpace(model.LastName))
+                {
+                    first = model.FirstName?.Trim() ?? string.Empty;
+                    middle = string.IsNullOrWhiteSpace(model.MiddleName) ? null : model.MiddleName.Trim();
+                    last = string.IsNullOrWhiteSpace(model.LastName) ? null : model.LastName.Trim();
+                }
+                else
+                {
+                    (first, middle, last) = MigrationNameSplitter.Split(resolvedName);
+                }
+
                 // Set if empty, or if the user has no verified identity locking it.
                 if (!hasExistingName || !isIdentityVerified)
+                {
                     user.Name = resolvedName.Trim();
+                    user.FirstName = first;
+                    user.MiddleName = middle;
+                    user.LastName = last;
+                }
+                else if (string.IsNullOrWhiteSpace(user.FirstName))
+                {
+                    // Verified user whose name matches: the name stays locked,
+                    // but fill the new part columns if they were never populated.
+                    user.FirstName = first;
+                    user.MiddleName = middle;
+                    user.LastName = last;
+                }
             }
-
 
             if (!string.IsNullOrEmpty(model.PhoneNumber))
             {
-                if(user.PhoneNumber != model.PhoneNumber)
+                if(!string.IsNullOrEmpty(user.PhoneNumber) && user.PhoneNumber != model.PhoneNumber)
                 {
                     //add to error to be displayed to user
                     throw new BaseException(
@@ -1033,8 +1306,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     user.BVN = model.BVN;
                 }
             }
-            user.DateOfBirth ??= model.DateOfBirth;
-            user.ModifiedBy = userId;
+            bool identityLocked = user.IsBvnVerified; // add || user.IsNinVerified if you have that flag
+
+            if (!string.IsNullOrWhiteSpace(model.DateOfBirth))
+            {
+                var incoming = model.DateOfBirth.Trim();
+
+                if (identityLocked
+                    && !string.IsNullOrWhiteSpace(user.DateOfBirth)
+                    && !SameDate(incoming, user.DateOfBirth))
+                {
+                    throw new BaseException(ExceptionType.BAD_REQUEST,
+                        "Date of birth cannot be changed after BVN or NIN verification. Please contact support if you believe this is an error.");
+                }
+
+                if (!identityLocked || string.IsNullOrWhiteSpace(user.DateOfBirth))
+                    user.DateOfBirth = incoming;
+            }
+
+            if (!string.IsNullOrWhiteSpace(model.Gender))
+            {
+                var incoming = model.Gender.Trim();
+
+                if (identityLocked
+                    && !string.IsNullOrWhiteSpace(user.Gender)
+                    && !string.Equals(incoming, user.Gender, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BaseException(ExceptionType.BAD_REQUEST,
+                        "Gender cannot be changed after BVN or NIN verification. Please contact support if you believe this is an error.");
+                }
+
+                if (!identityLocked || string.IsNullOrWhiteSpace(user.Gender))
+                    user.Gender = incoming;
+            }
+
+
+
+        user.ModifiedBy = userId;
             if(user.UserType ==  UserType.Farmer.ToString())
             {
                 var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.UserId == userId);
@@ -1076,6 +1384,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
            
         }
+        private static bool SameDate(string a, string b) =>
+    DateTime.TryParse(a, out var da) && DateTime.TryParse(b, out var db)
+        ? da.Date == db.Date
+        : string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+
         public async Task<CreateUserResult> RegisterUser(
         OnboardingRequestModel model, OnBoardingArgs args)
         {
@@ -1112,7 +1426,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return await HandleExistingUser(user, model, args, role);
         }
      
-        public async Task<IdentityRole> GetRoleAsync(string roleName)
+        public async Task<Role> GetRoleAsync(string roleName)
         {
             var role = await _roleManager.FindByNameAsync(roleName);
 
@@ -1201,16 +1515,62 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
+        private static (string First, string? Middle, string? Last) ResolveNameParts(
+      string? firstName, string? middleName, string? lastName, string fullName)
+        {
+            if (!string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName))
+            {
+                return (
+                    firstName?.Trim() ?? string.Empty,
+                    string.IsNullOrWhiteSpace(middleName) ? null : middleName.Trim(),
+                    string.IsNullOrWhiteSpace(lastName) ? null : lastName.Trim());
+            }
+
+            return MigrationNameSplitter.Split(fullName);
+        }
         public async Task<CreateUserResult> HandleExistingUser(
         User user,
         OnboardingRequestModel model,
         OnBoardingArgs args,
-        IdentityRole role)
+        Role role )
         {
      
             if (!string.IsNullOrEmpty(model.DateOfBirth) && user.DateOfBirth != model.DateOfBirth)
             {
                 user.DateOfBirth = model.DateOfBirth;
+            }
+            var incomingName = !string.IsNullOrWhiteSpace(model.FullName)
+    ? model.FullName
+    : string.Join(" ",
+        new[] { model.FirstName, model.MiddleName, model.LastName }
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            bool hasName = !string.IsNullOrWhiteSpace(user.Name);
+            bool hasParts = !string.IsNullOrWhiteSpace(user.FirstName);
+
+            if (!hasName && !string.IsNullOrWhiteSpace(incomingName))
+            {
+                user.Name = incomingName.Trim();
+            }
+
+            if (!hasParts)
+            {
+                if (hasName)
+                {
+                    // Name already on file but parts never populated: derive them from the stored name
+                    // so Name and the part columns always agree.
+                    var (f, m, l) = MigrationNameSplitter.Split(user.Name);
+                    user.FirstName = f;
+                    user.MiddleName = m;
+                    user.LastName = l;
+                }
+                else if (!string.IsNullOrWhiteSpace(incomingName))
+                {
+                    var (f, m, l) = ResolveNameParts(model.FirstName, model.MiddleName, model.LastName, incomingName);
+                    user.FirstName = f;
+                    user.MiddleName = m;
+                    user.LastName = l;
+                }
             }
             if (!string.IsNullOrWhiteSpace(model.PhoneNumber)
                 && !string.Equals(model.PhoneNumber, user.PhoneNumber, StringComparison.OrdinalIgnoreCase))
@@ -1233,7 +1593,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 user.PhoneNumber = model.PhoneNumber;
             }
-
+             
             if (!string.IsNullOrWhiteSpace(model.Email)
                 && !string.Equals(model.Email, user.Email, StringComparison.OrdinalIgnoreCase))
             {
@@ -1256,7 +1616,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 user.Email = model.Email;
             }
-         
+
+            if (user.IsBvnVerified
+                  && !string.IsNullOrEmpty(model.DateOfBirth)
+                      && model.DateOfBirth != user.DateOfBirth)
+            {
+                throw new BaseException(
+                            ExceptionType.BAD_REQUEST, "Date of birth cannot be changed after BVN or NIN verification.");
+
+            }
+            if (user.IsBvnVerified
+                    && !string.IsNullOrEmpty(model.Gender)
+                        && model.Gender != user.Gender)
+            {
+                throw new BaseException(
+                            ExceptionType.BAD_REQUEST, "Gender cannot be changed after BVN or NIN verification.Please contact support if you believe this is an error.");
+
+            }
+
             if (string.IsNullOrWhiteSpace(args.businessCode))
             {
                 throw new BaseException(ExceptionType.ACCESS_DENIED, "Business context is required");
@@ -1358,7 +1735,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (!hasIdentityRole)
             {
-                var roleResult = await _userManager.AddToRoleAsync(user, role.Name);
+                var roleResult = await AssignRoleAsync(user.Id, role.Id, business.BusinessId);//await _userManager.AddToRoleAsync(user, role.Name);
 
                 if (!roleResult.Succeeded)
                 {
@@ -1441,8 +1818,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<CreateUserResult> CreateNewUser(
         OnboardingRequestModel model,
         OnBoardingArgs args,
-        IdentityRole role)
+        Role role)
         {
+          
             var salt = EncryptionUtil.GetSalt();
             model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
     ? SignupMethod.Email
@@ -1528,7 +1906,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 };
             }
 
-            await _userManager.AddToRoleAsync(user, role.Name);
+            //await _userManager.AddToRoleAsync(user, role.Name);
             Business? business = null;
 
             if (!string.IsNullOrWhiteSpace(args.businessCode))
@@ -1536,6 +1914,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 business = await _context.Businesses
                     .FirstOrDefaultAsync(x => x.BusinessCode == args.businessCode);
             }
+            await AssignRoleAsync(user.Id, role.Id, business.BusinessId);
+
 
             if (business == null)
             {
@@ -1647,6 +2027,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 Id = GenerateUserId(args),
                 DateOfBirth=model.DateOfBirth,
+                Gender=model.Gender,
                 UserName = model.Email ?? model.PhoneNumber,
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber,
@@ -1656,6 +2037,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = args.userType,
                 BusinessCode = args.businessCode,
                 CreatedBy = args.UserId,
+                FirstName = model.FirstName,
+                MiddleName = model.MiddleName,
+                LastName = model.LastName,
                 Name = !string.IsNullOrWhiteSpace(model.FullName)
        ? model.FullName
        : (string.IsNullOrWhiteSpace(model.FirstName) && string.IsNullOrWhiteSpace(model.LastName)
@@ -1781,15 +2165,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             _log.LogInformation($"User {userId} removed from organization {organizationCode}.");
         }
-        public async Task TrackUserRoleAssignment(string userId, string userType)
+        public async Task TrackUserRoleAssignment(string userId, string userType, string roleId, long businessId)
         {
             var model = await _userManager.FindByIdAsync(userId);
             try
             {
             
-                if (!await _userManager.IsInRoleAsync(model, userType))
+                if (!await UserExistinRole(userId, roleId, businessId)
+                    //!await _userManager.IsInRoleAsync(model, userType)
+                    )
                 {
-                    await _userManager.AddToRoleAsync(model, userType);
+                    await AssignRoleAsync(userId, roleId, businessId);
+                   // await _userManager.AddToRoleAsync(model, userType);
 
                 }
 
@@ -1815,6 +2202,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)
         {
+
+
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return (null, false, "No record found");
             return (user.Map(), true, "Retrieved Successfully");
@@ -1896,7 +2285,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<(UserModel model, bool status, string message)> OnRegistrationAsync(UserModel model, string roleName)
         {
+            var business = await _context.Businesses.FirstOrDefaultAsync(x => x.BusinessCode == model.BusinessCode);
+
+            if(business == null)
+            {
+                return (model, false, "Invalid business");
+            }
             // Use phone number as email if email is not provided
+
             model.Email = !string.IsNullOrWhiteSpace(model.Email) ? model.Email : model.PhoneNumber;
 
             // Generate salt for PIN encryption
@@ -1982,13 +2378,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (role == null)
                 return (model, false, "Specified role does not exist.");
 
-            var roleResult = await _userManager.AddToRoleAsync(entity, role.Name);
+            var roleResult = await AssignRoleAsync(entity.Id, role.Id, business.BusinessId);  //_userManager.AddToRoleAsync(entity, role.Name);
             if (!roleResult.Succeeded)
             {
                 var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
                 return (model, false, $"Could not assign role: {errors}");
             }
+            var exists = await _context.UserBusinesses
+      .AnyAsync(x => x.UserId == entity.Id && x.BusinessId == business.BusinessId);
 
+            if (!exists)
+            {
+                _context.UserBusinesses.Add(new UserBusiness
+                {
+                    UserId = entity.Id,
+                    BusinessId = business.BusinessId,
+                    IsDefault = true,
+                    IsActive = true,
+                    Role = roleName,
+                    JoinedOn = DateTimeOffset.UtcNow
+                });
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
+                {
+                    _log.LogInformation(
+                        "Duplicate UserBusiness detected for user {UserId} in business {BusinessId} - " +
+                        "treating as existing membership, not a failure.",
+                        entity.Id, business.BusinessId);
+
+                    //return await HandleExistingUser(entity, model, args, role);
+                }
+            }
             // Add user to organization if applicable
             if (!string.IsNullOrEmpty(model.OrganizationCode) &&
                 !_context.UserOrganizations.Local.Any(x => x.UserId == entity.Id && x.OrganizationCode == model.OrganizationCode))
@@ -2137,8 +2561,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 user.Name = resolvedName;
 
             // ── Phone: immutable (compared by digits so 0803… == +234803…) ──────
-            if (!string.IsNullOrWhiteSpace(model.PhoneNumber) &&
-                !PhoneNumbersMatch(user.PhoneNumber, model.PhoneNumber))
+            if (!string.IsNullOrEmpty(user.PhoneNumber) && (!string.IsNullOrWhiteSpace(model.PhoneNumber) &&
+                !PhoneNumbersMatch(user.PhoneNumber, model.PhoneNumber)))
             {
                 throw new BaseException(
                     ExceptionType.BAD_REQUEST,
@@ -2274,9 +2698,219 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var keyA = PhoneKey(a);
             return keyA.Length > 0 && keyA == PhoneKey(b);
         }
-   
-    
+
+
+
+
+        #region admin
+        public async Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
+        {
+            var loginModel = new LoginModel
+            {
+                Email = model.Email!.Trim(),
+                Password = model.Password,
+                LoginMethod = /* ASSUMPTION: the value that means "email + password" */ default,
+                BusinessCode = businessCode
+            };
+
+            // 1. Who is this? Unknown user and wrong password return the SAME message, so the
+            //    endpoint can't be used to find out which emails exist.
+            var user = await ResolveUserAsync(loginModel);
+            if (user == null)
+                return AdminLoginResult.Fail(AdminLoginStatus.InvalidCredentials, AdminMessages.InvalidCredentials);
+
+            var credentialResult = await ValidateCredentialsAsync(user, loginModel);
+            if (!credentialResult.Success)
+                return AdminLoginResult.Fail(AdminLoginStatus.InvalidCredentials, AdminMessages.InvalidCredentials);
+            // If ValidateCredentialsAsync also reports lockout, return its message for that case only.
+
+            // 2. Credentials are correct, so it is now safe to say why access is refused.
+            if (!user.IsActive) // ASSUMPTION: property name for "account is active"
+                return AdminLoginResult.Fail(AdminLoginStatus.AccountInactive, AdminMessages.AccountInactive);
+
+            if(user.Status == AdminUserStatus.Deactivated)
+                return AdminLoginResult.Fail(AdminLoginStatus.AccountInactive, AdminMessages.Deactivated);
+
+            if(user.Status == AdminUserStatus.Suspended)
+                return AdminLoginResult.Fail(AdminLoginStatus.AccountInactive, AdminMessages.Suspended);
+
+            var userBusinesses = await _context.UserBusinesses
+                .Include(x => x.Business)
+                .Where(x => x.UserId == user.Id && x.IsActive)
+                .ToListAsync();
+
+            var candidates = string.IsNullOrWhiteSpace(businessCode)
+                ? userBusinesses.OrderByDescending(x => x.IsDefault).ToList()
+                : userBusinesses.Where(x => x.Business.BusinessCode == businessCode).ToList();
+
+            // 3. Pick the first business where this user actually holds Admin Panel access.
+            UserBusiness? activeBusiness = null;
+            AdminAccess? access = null;
+
+            foreach (var candidate in candidates)
+            {
+                var found = await GetAdminAccessAsync(user.Id, candidate.BusinessId);
+                if (found.HasAccess)
+                {
+                    activeBusiness = candidate;
+                    access = found;
+                    break;
+                }
+            }
+
+            if (activeBusiness == null || access == null)
+                return AdminLoginResult.Fail(AdminLoginStatus.NoAdminAccess, AdminMessages.NoAdminAccess);
+
+            // 4. Only now are tokens issued.
+            var weak = CheckWeakCredentials(user, loginModel);
+
+
+
+            var tokens = await IssueTokensAsync(
+                user,
+                activeBusiness,
+                weak.IsWeak,
+                weak.Message,
+                familyId: Guid.NewGuid().ToString("N"),
+                ipAddress,
+                adminAccess: access);
+
+            var c = _client.Get();     // call once per login attempt
+
+            _context.AdminLoginHistories.Add(new AdminLoginHistory
+            {
+
+                UserId = user.Id,
+                LoggedInAt = DateTimeOffset.UtcNow,
+                Succeeded = true /* or false */,
+                FailureReason = null /* "Incorrect password" | "Account inactive" | "No Admin Panel access" */,
+                IpAddress = ipAddress,
+                UserAgent = c.UserAgent,//Request.Headers.UserAgent.ToString()
+                Browser = c.Browser,
+                OperatingSystem = c.OperatingSystem,
+                DeviceType = c.DeviceType,
+                DeviceName = c.DeviceName
+            });
+
+
+
+            await _context.SaveChangesAsync();
+            return AdminLoginResult.Ok(new AdminLoginResponseModel
+            {
+                Token= tokens.Token,
+                RefreshToken = tokens.RefreshToken,
+                TwoFactorEnabled = user.TwoFactorEnabled,
+               // Authmethod = tokens.Authmethod,
+                //BusinessCode= activeBusiness.Business.BusinessCode,
+                //Email = user.Email,
+                //ExpiresOn = tokens.ExpiresOn,
+                //Id = user.Id,
+                //Name = user.Name,
+                //Permissions = access.Permissions,
+                //phone_number = user.PhoneNumber,
+                RefreshTokenExpiresOn = tokens.RefreshTokenExpiresOn,
+                //Roles = access.Roles,
+                RequiresCredentialChange = weak.IsWeak,
+                SecurityNotice = weak.IsWeak ? weak.Message : null,
+                TokenType = tokens.TokenType,
+                //Tokens = tokens,
+                //User = new AdminUserProfile
+                //{
+                //    Id = user.Id.ToString(),
+                //    FirstName = user.FirstName,
+                //    LastName = user.LastName,
+                //    Email = user.Email
+                //},
+                ////Roles = access.Roles,
+                ////Permissions = access.Permissions,
+                ////RequiresCredentialChange = weak.IsWeak,
+                //CredentialMessage = weak.IsWeak ? weak.Message : null
+            });
+        }
+
+        /// <summary>
+        /// ASSUMPTION: roles live in UserRoles -> Role -> Permissions, scoped per business.
+        /// Adapt the query to however you store roles. The only requirement is that it returns
+        /// the user's role names, their permission names, and whether AdminPanel.Access is among them.
+        /// Being a farmer / agent / organization / cooperative profile must NOT count as admin access.
+        /// </summary>
+        private async Task<AdminAccess> GetAdminAccessAsync(string userId, long businessId)
+        {
+            var rows = await _context.UserRoles
+                .Where(ur => ur.UserId == userId && ur.BusinessId == businessId && ur.IsActive)
+                .Select(ur => new
+                {
+                    RoleName = ur.Role.Name,
+                    Permissions = ur.Role.RolePermissions.Select(rp => rp.Permission.Name).ToList()
+                })
+                .ToListAsync();
+
+            var roles = rows.Select(r => r.RoleName).Distinct().ToList();
+            var permissions = rows.SelectMany(r => r.Permissions).Distinct().ToList();
+
+            // A user with several roles gets the UNION of their permissions.
+            var hasAccess = permissions.Contains(Permissions.AdminPanel.Access, StringComparer.OrdinalIgnoreCase);
+            return new AdminAccess(hasAccess, roles, permissions);
+        }
+
+
+        #endregion admin
+
+        public async Task<IdentityResult> AssignRoleAsync(string userId, string roleId, long businessId, CancellationToken ct = default)
+        {
+            try
+            {
+                var row = await _context.UserRoles.FirstOrDefaultAsync(
+                    ur => ur.UserId == userId && ur.RoleId == roleId && ur.BusinessId == businessId, ct);
+
+                if (row == null)
+                    _context.UserRoles.Add(new ApplicationUserRole
+                    {
+                        UserId = userId,
+                        RoleId = roleId,
+                        BusinessId = businessId,
+                        IsActive = true
+                    });
+                else
+                    row.IsActive = true; // re-activate instead of inserting a duplicate
+
+                await _context.SaveChangesAsync(ct);
+                return IdentityResult.Success;
+            }
+            catch (DbUpdateException dbEx)
+            {
+                // Database error while assigning role
+                return IdentityResult.Failed(new IdentityError { Description = dbEx.InnerException?.Message ?? dbEx.Message });
+            }
+            catch (Exception ex)
+            {
+                return IdentityResult.Failed(new IdentityError { Description = ex.Message });
+            }
+        }
+
+        /// <summary>Soft revoke: keeps the history and is picked up by the IsActive filter at the next login/refresh.</summary>
+        public async Task RevokeRoleAsync(string userId, string roleId, long businessId, CancellationToken ct = default)
+        {
+            var row = await _context.UserRoles.FirstOrDefaultAsync(
+                ur => ur.UserId == userId && ur.RoleId == roleId && ur.BusinessId == businessId, ct);
+
+            if (row == null) return;
+
+            row.IsActive = false;
+            await _context.SaveChangesAsync(ct);
+        }
+        public async Task<bool> UserExistinRole(string userId, string roleId, long businessId, CancellationToken ct = default)
+        {
+            var row = await _context.UserRoles.FirstOrDefaultAsync(
+                ur => ur.UserId == userId && ur.RoleId == roleId && ur.BusinessId == businessId, ct);
+
+            if (row == null) return false;
+            return true;
+
+            
+        }
     }
 
 }
+
 

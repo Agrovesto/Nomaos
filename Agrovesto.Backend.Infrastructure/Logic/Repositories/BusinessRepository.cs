@@ -157,6 +157,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (orgModel.LgaId > 0)
                 orgExist.LgaId = orgModel.LgaId;
+            if (orgModel.WardId > 0)
+                orgExist.WardId = orgModel.WardId;
 
             if (!string.IsNullOrWhiteSpace(orgModel.CompanyAddress))
                 orgExist.CompanyAddress = orgModel.CompanyAddress;

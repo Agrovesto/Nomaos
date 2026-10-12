@@ -218,6 +218,15 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     }
                 }
 
+                if(request.PhoneNumber.IsNullOrEmpty() is false)
+                {
+                    if (userProfile.Phone.IsNullOrEmpty())
+                    {
+                        userProfile.Phone = request.PhoneNumber;
+                        await _onboardingRepository.UpdateUserDetails(new OnboardingRequestModel() { Bvn = request.BVN}, new OnBoardingArgs() { UserId = args.UserId });
+                    }
+                }
+
 
                 var contextType = string.IsNullOrWhiteSpace(args.organizationCode)
                     ? WalletContextType.Personal
@@ -1618,13 +1627,21 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
             _logger.LogInformation("Wallet PIN reset OTP sent over {Channel} for UserId: {UserId}", request.Channel, args.UserId);
 
-            return (true, overSms
+            var baseMessage = overSms
                 ? "A reset code has been sent to your mobile number"
-                : "A reset code has been sent to your email address", new WalletPinResetOtpResult
-                {
-                    Destination = overSms ? MaskPhoneNumber(destination) : MaskEmail(destination),
-                    ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
-                });
+                : "A reset code has been sent to your email address";
+
+            // In Demo environment append the OTP code to the response so callers can see it.
+            if (!string.IsNullOrWhiteSpace(args.env) && args.env == Env.Demo.ToString())
+            {
+                baseMessage = $"{baseMessage} (code: {otp.Code})";
+            }
+
+            return (true, baseMessage, new WalletPinResetOtpResult
+            {
+                Destination = overSms ? MaskPhoneNumber(destination) : MaskEmail(destination),
+                ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
+            });
         }
 
         private async Task<bool> SendPinResetSms(string phoneNumber, string message, WalletQueryParams args)
