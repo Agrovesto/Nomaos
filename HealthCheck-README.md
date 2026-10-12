@@ -269,7 +269,7 @@ Your existing Nginx configuration already includes:
 ```nginx
 # Health check endpoint for load balancer
 location /health {
-    proxy_pass         http://127.0.0.1:5000/health;
+    proxy_pass         http://127.0.0.1:5007/health;
     proxy_http_version 1.1;
     proxy_set_header   Host $host;
     proxy_connect_timeout 5s;
@@ -352,14 +352,14 @@ Ensure the following configuration sections are present in your `appsettings.jso
 ### Local Development Testing
 ```bash
 # Test all endpoints locally
-curl http://localhost:5000/health
-curl http://localhost:5000/health/detailed
-curl http://localhost:5000/health/database
-curl http://localhost:5000/health/external
-curl http://localhost:5000/health/endpoints
-curl http://localhost:5000/health/components
-curl http://localhost:5000/health/critical
-curl http://localhost:5000/health/status
+curl http://localhost:5007/health
+curl http://localhost:5007/health/detailed
+curl http://localhost:5007/health/database
+curl http://localhost:5007/health/external
+curl http://localhost:5007/health/endpoints
+curl http://localhost:5007/health/components
+curl http://localhost:5007/health/critical
+curl http://localhost:5007/health/status
 ```
 
 ### Production Testing

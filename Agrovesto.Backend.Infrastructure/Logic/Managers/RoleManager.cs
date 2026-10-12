@@ -229,21 +229,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
         public async Task<PagedListResponse<List<RoleModel>>> GetRolesAsync()
         {
-            var roles = await _context.Roles.Where(x => !x.IsAvailableToAdmin).ToListAsync();
-
-            var roleMap = roles.Select(x => x.Map()).ToList();
-            return new PagedListResponse<List<RoleModel>>
-            {
-                Data = roleMap,
-                Code = "00",
-                Message = "",
-                Count = roleMap.Count,
-                Succeeded = true,
-            };
-        }
-        public async Task<PagedListResponse<List<RoleModel>>> GetAdminRolesAsync()
-        {
-            var roles = await _context.Roles.Where(x => x.IsAvailableToAdmin).ToListAsync();
+            var roles = await _roleManager.Roles.ToListAsync();
 
             var roleMap = roles.Select(x => x.Map()).ToList();
             return new PagedListResponse<List<RoleModel>>

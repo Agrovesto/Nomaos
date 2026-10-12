@@ -1,5 +1,4 @@
-﻿using Agrovesto.Backend.Core.Enums;
-using NetTopologySuite.Geometries;
+﻿using NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -66,10 +65,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public MappingStatus MappingStatus { get; set; } = MappingStatus.UnMapped;
         public Polygon? FarmPolygon { get; set; } // to get areas in degress, FarmPolygon.Area
 
-
-        public string? PrimaryCrop { get; set; }
     }
- 
+    public enum MappingStatus
+    {
+        UnMapped, //no coordinates added
+        Mapped, //coordinates added but not verified
+        Verified // verified
+    }
     public class FarmAllocation
     {
         [Key]

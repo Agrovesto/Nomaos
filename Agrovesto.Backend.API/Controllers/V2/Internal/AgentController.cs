@@ -31,14 +31,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IBulkMembershipValidator _validator;
         private readonly IBulkMembershipUploadService _memberShipUploadService;
         private readonly ILogger<AgentController> _logger;
-        private readonly IOrganizationManager _organizationManager;
 
-
+        
         public AgentController(IHttpContextAccessor httpContextAccessor, IAgentManager agentManager,
             IBusinessManager businessManager,
             IOnBoardingManager onBoardingManager,
-
-             IOrganizationManager organizationManager,
             IMembershipManager membershipManager,
             ILogger<AgentController> logger,
                 IBulkFarmerUploadService bulkFarmerUploadService,
@@ -55,7 +52,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _memberShipUploadService = memberShipUploadService;
             _membershipManager = membershipManager;
             _logger = logger;
-            _organizationManager = organizationManager;
         }
       
         
@@ -332,30 +328,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (!args.AgentIds.Contains(agent.Id))
                 args.AgentIds.Add(agent.Id);
         }
-
-
-        [HttpPost("create-farmer")]
-        [AllowAnonymous]
-        public async Task<IActionResult> CreateFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
-        {
-            if (!ModelState.IsValid)
-                return ValidationProblemResponse();
-            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
-            if (orgError != null) return orgError;
-            args.organizationCode = resolvedOrgCode;
-            args.OnboardedByUserId = CurrentUserId;
-            args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-
-            await EnrichAgentAsync(args);
-            return await ExecuteAsync(
-                () =>
-                {
-                    
-                    return _organizationManager.CreateFarmerAsync(model, args);
-                },
-                request => Ok(Success(request, request.Message)));
-        }
-
-
+       
     }
 }

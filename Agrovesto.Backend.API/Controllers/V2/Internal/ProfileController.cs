@@ -561,7 +561,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("resend-otp")]
         [Authorize]
-        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] VerificationArgs args)
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();

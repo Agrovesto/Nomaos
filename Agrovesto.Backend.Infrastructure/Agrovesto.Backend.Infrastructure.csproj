@@ -47,7 +47,7 @@
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
     <PackageReference Include="Hangfire.SqlServer" Version="1.8.23" />
     <PackageReference Include="Humanizer" Version="2.14.1" />
-    <PackageReference Include="iTextSharp" Version="5.5.13.4">
+    <PackageReference Include="iTextSharp" Version="5.5.13.4" >
       <NoWarn>NU1701</NoWarn>
     </PackageReference>
     <PackageReference Include="libphonenumber-csharp" Version="8.13.12" />
@@ -88,7 +88,6 @@
     <PackageReference Include="SendGrid" Version="9.29.3" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.1.2" />
-    <PackageReference Include="UAParser" Version="3.1.47" />
   </ItemGroup>
 
   <ItemGroup>

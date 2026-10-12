@@ -1425,7 +1425,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 await EnsureWalletExists(registerUser.model, business);
 
-                //await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
+                await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
 
                 return new CreateAgentResponseModel
                 {
@@ -1483,7 +1483,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 LastName = model.LastName,
                 DateOfBirth=model.DateOfBirth,
                 SignupMethod=model.SignupMethod,
-                Gender=model.Gender
             };
         }
         private async Task<(bool status, AgentModel data)> CreateAgent(
@@ -1685,7 +1684,7 @@ DateTimeOffset dateTime)
             {
                 await LogActivity(user, args);
                 await EnsureWalletExists(user, business);
-               // await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
+                await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
                 await SendDefaultCredentialChange(user, args.businessCode);
             }
             catch (Exception ex)
@@ -2170,7 +2169,7 @@ DateTimeOffset dateTime)
             {
                 await EnsureWalletExists(user, business);
                 await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
-               // await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
+                await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
                
             }
             catch (Exception ex)
@@ -2243,7 +2242,7 @@ DateTimeOffset dateTime)
                 BelongToBusinessCode = args.businessCode,
                 OrganizationId = model.OrganizationId,
                 OnboardedById = args.OnboardedByUserId,
-                RegistrationNumber=model.RegistrationNumber,
+
                 HasbeenAssignedAgent = agentIds.Any(),
 
                 MembershipLeaderFirstName = model.MembershipLeaderFirstName,
@@ -2267,8 +2266,7 @@ DateTimeOffset dateTime)
                     FirstName = model.MembershipLeaderFirstName,
                     MiddleName = model.MembershipLeaderMiddleName,
                     LastName = model.MembershipLeaderLastName,
-                    SignupMethod=model.SignupMethod,
-                    Gender=model.Gender
+                    SignupMethod=model.SignupMethod
                 }, args);
 
             if (!result.status)

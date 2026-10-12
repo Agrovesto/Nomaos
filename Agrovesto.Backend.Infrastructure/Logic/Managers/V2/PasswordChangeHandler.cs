@@ -24,13 +24,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IAWSService _awsService;
         private readonly IConfiguration _configuration;
         private readonly PasswordOptions _passwordOptions;
-        private readonly TimeSpan _tokenLifespan;
+
         public PasswordChangeHandler(UserManager<User> userManager, DataContext context,
              IAWSService awsService, IConfiguration configuration,
 
-        IOptions<IdentityOptions> identityOptions, IOptions<DataProtectionTokenProviderOptions> tokenOptions)
+        IOptions<IdentityOptions> identityOptions)
         {
-            _tokenLifespan = tokenOptions.Value.TokenLifespan;
             _userManager = userManager;
             _context = context;
             _passwordOptions = identityOptions.Value.Password;
@@ -43,37 +42,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<User> FindUserAsync(ChangeCredentialModel model)
         {
-            var identifier = model.Email?.Trim();
-
-            if (string.IsNullOrWhiteSpace(identifier))
-                throw new BaseException(ExceptionType.BAD_REQUEST,
-                    "Email or user ID is required.");
-
-            User user = null;
-
-            if (identifier.Contains("@"))
-                user = await _userManager.FindByEmailAsync(identifier);
-
-            if (user == null)
-            {
-                try
-                {
-                    user = await _userManager.FindByIdAsync(identifier);
-                }
-                catch (FormatException)
-                {
-                    // identifier isn't a valid key format (e.g. not a Guid/int), so treat as not found
-                }
-            }
-
-            if (user == null)
-                throw new BaseException(ExceptionType.BAD_REQUEST,
-                    "No account was found for the details you entered.");
-
-            if (string.IsNullOrWhiteSpace(user.Email))
+            if (string.IsNullOrWhiteSpace(model.Email))
                 throw new BaseException(ExceptionType.OPERATION_FAILED,
                     "Cannot change password for an account with no email address, kindly update your profile");
 
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user == null)
+                 user = await _userManager.FindByIdAsync(model.Email);
+            if (user == null)
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "The current password you entered is incorrect.");
+            }
             return user;
         }
 
@@ -125,12 +104,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
             var callbackUrl = $"{_configuration["ResetPasswordLink"]}?t={encodedToken}&u={user.Id}";
 
-            return new ResetArtifact { Value = callbackUrl, ExpiresAt = DateTime.UtcNow.AddMinutes(_tokenLifespan.TotalMinutes) }; // adjust to your actual token lifetime
+            return new ResetArtifact { Value = callbackUrl, ExpiresAt = DateTime.UtcNow.AddHours(1) }; // adjust to your actual token lifetime
         }
 
         public async Task DeliverLiveAsync(User user, ResetArtifact artifact, ForgotCredentialModel model)
         {
-            var message = $"Please have your password reset by <a href='{artifact.Value}'>clicking here</a>. Expires in {FormatDuration(_tokenLifespan)}.";
+            var message = $"Please have your password reset by <a href='{artifact.Value}'>clicking here</a>.";
 
             await _awsService.SendEmailAsync(
                 _configuration["Official:Email"],
@@ -140,17 +119,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 message);
         }
         public string BuildNonLiveMessage(ResetArtifact artifact)
-            => $"Your reset link: {artifact.Value}. Expires in {FormatDuration(_tokenLifespan)}.";
-
-        private static string FormatDuration(TimeSpan span)
-        {
-            if (span.TotalDays >= 1 && span.TotalDays % 1 == 0)
-                return $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")}";
-            if (span.TotalHours >= 1 && span.TotalHours % 1 == 0)
-                return $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")}";
-            var minutes = (int)Math.Ceiling(span.TotalMinutes);
-            return $"{minutes} minute{(minutes == 1 ? "" : "s")}";
-        }
+        => $"Your reset link: {artifact.Value}";
         public async Task ConfirmAsync(User user, ConfirmCredentialResetModel model)
         {
             if (string.IsNullOrWhiteSpace(model.Token))

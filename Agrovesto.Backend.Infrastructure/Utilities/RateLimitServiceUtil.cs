@@ -45,14 +45,6 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
                     maxAttempts = _settings.RESET_PASSWORD.MaxAttempts;
                     window = TimeSpan.FromMinutes(_settings.RESET_PASSWORD.WindowMinutes);
                     break;
-                case RateLimitType.FORGOT_CREDENTIAL:
-                    maxAttempts = _settings.FORGOT_CREDENTIAL.MaxAttempts;
-                    window = TimeSpan.FromMinutes(_settings.FORGOT_CREDENTIAL.WindowMinutes);
-                    break;
-                case RateLimitType.FORGOT_CREDENTIAL_IP:
-                    maxAttempts = _settings.FORGOT_CREDENTIAL_IP.MaxAttempts;
-                    window = TimeSpan.FromMinutes(_settings.FORGOT_CREDENTIAL_IP.WindowMinutes);
-                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(rateLimitType), "Unknown rate limit type");
             }
