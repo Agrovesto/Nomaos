@@ -1471,7 +1471,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //OrganizationCode = model.OrganizationCode,
                 OnboardedById = model.OnboardedById,
                 MemberShipTypeId = model.MemberShipTypeId,
-                TierLevel = model.Tier.ToEnum<Tier>(),
+                //TierLevel = model.Tier.ToEnum<Tier>(),
 
             };
         }
@@ -1984,6 +1984,7 @@ namespace Agrovesto.Backend.Infrastructure
                 LastName = model.LastName,
                 StateId = (model.StateId == null || model.StateId == 0) ? null : model.StateId,
                 LgaId = (model.LgaId == null || model.LgaId == 0) ? null : model.LgaId,
+                WardId = (model.WardId == null || model.WardId == 0) ? null : model.WardId,
 
                 FullName = $"{model.FirstName} {model.LastName}",
                 OnboardedOn = DateTimeOffset.Now,

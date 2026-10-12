@@ -106,6 +106,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task SyncLocationStockLevels(ListQueryParams query);
         Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args);
         Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query);
+        Task<MemberShipModel> AssignBulkFarmerToCooperative(AssignmentArgs args);
+        Task<MemberShipModel> AssignBulkAgentToCooperative(AssignmentArgs args);
+        Task<bool> DeactivateUser(
+             string membershipUserId,
+             string participantUserId,
+             MembershipParticipantType participantType,
+             string deactivatedByUserId,
+             string? reason);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -128,6 +136,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IFarmerTransactionRepository _farmerTransactionRepository;
         private readonly IConfiguration _configuration;
         private readonly IAWSRekognitionManager _faceManager;
+       
         public OrganizationManager(IAWSRekognitionManager faceManager,
             IFarmerTransactionRepository farmerTransactionRepository,
             IWalletManager walletManager,
@@ -434,35 +443,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
         }
        
-        //public async Task RetryFailedOnboarding(string userId)
-        //{
-        //    var user = await _userManager.FindByIdAsync(userId);
-
-        //    if (user == null)
-        //        throw new Exception("User not found");
-
-        //    if (user.FarmerOnboardingStatus != FarmerOnboardingStatus.Failed)
-        //        throw new Exception("User is not in failed state");
-
-        //    // rebuild request (important)
-        //    var model = new CreateFarmerRequest
-        //    {
-        //        FirstName = user.Name,
-        //        LastName = user.Name,
-        //        Email = user.Email,
-        //        PhoneNumber = user.PhoneNumber,
-        //        // fill other fields as needed
-        //    };
-
-        //    var args = new OnBoardingArgs
-        //    {
-        //        businessCode = user.BusinessCode,
-        //        organizationCode = user.OrganizationCode
-        //    };
-
-        //    await CreateFarmerAsync(model, args);
-        //}
-        private string GenerateUserId(OnBoardingArgs args)
+          private string GenerateUserId(OnBoardingArgs args)
         {
             var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
             var randomDigits = new Random().Next(100, 999);
@@ -562,192 +543,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 true,
                 "Registration Successful.");
         }
-
-        //public async Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args)
-        //{
-        //    string userId = "";
-        //    var dateTime = DateTimeOffset.UtcNow;
-
-        //    var business = await GetBusinessOrFail(args.businessCode);
-        //    var role = await _roleManager.FindByNameAsync(args.userType);
-
-        //    if (role == null)
-        //        throw new BaseException(ExceptionType.BAD_REQUEST, "Could not map role.");
-
-        //    if (excelStream == null)
-        //        throw new BaseException(
-        //            Core.Enums.ExceptionType.BAD_REQUEST,
-        //            "Excel file is required.");
-
-        //    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
-        //    if (hasOrg != null)
-        //    {
-        //        args.OrganizationId = hasOrg.OrganizaionId;
-        //    }
-
-        //    var rows = _excelConverterService.ParseExcel(excelStream);
-
-        //    if (!rows.Any())
-        //        throw new BaseException(
-        //            Core.Enums.ExceptionType.BAD_REQUEST,
-        //            "Excel file contains no records.");
-
-        //    var result = new BulkOnboardingResult
-        //    {
-        //        Total = rows.Count,
-        //        Errors = new List<BulkOnboardingError>()
-        //    };
-
-        //    int rowNumber = 0;
-
-        //    var tasks = new List<Task>();
-        //    var semaphore = new SemaphoreSlim(5); // safe concurrency
-
-        //    foreach (var row in rows)
-        //    {
-        //        rowNumber++;
-        //        var currentRow = row;
-        //        var currentRowNumber = rowNumber;
-
-        //        await semaphore.WaitAsync();
-
-        //        tasks.Add(Task.Run(async () =>
-        //        {
-        //            try
-        //            {
-        //                // Validate YearsInAgric
-        //                if (!long.TryParse(currentRow.YearsInAgric, out var years))
-        //                {
-        //                    throw new BaseException(
-        //                        Core.Enums.ExceptionType.BAD_REQUEST,
-        //                        $"Invalid YearsInAgric: {currentRow.YearsInAgric}");
-        //                }
-
-        //                // ValueChain mapping
-        //                var valueChains = new List<ValueChainSelectionDto>();
-
-        //                if (!string.IsNullOrWhiteSpace(currentRow.PartOfAgriculture))
-        //                {
-        //                    var items = string.IsNullOrWhiteSpace(currentRow.ProductTypes)
-        //                        ? new List<string>()
-        //                        : currentRow.ProductTypes
-        //                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-        //                            .Select(x => x.Trim())
-        //                            .ToList();
-
-        //                    valueChains.Add(new ValueChainSelectionDto
-        //                    {
-        //                        ValueChainType = currentRow.PartOfAgriculture,
-        //                        Items = items
-        //                    });
-        //                }
-
-        //                // Validate contact
-        //                if (string.IsNullOrWhiteSpace(currentRow.Email) &&
-        //                    string.IsNullOrWhiteSpace(currentRow.PhoneNumber))
-        //                {
-        //                    throw new BaseException(
-        //                        Core.Enums.ExceptionType.BAD_REQUEST,
-        //                        "Either phone or email is required.");
-        //                }
-
-        //                FarmerModel model = BuildFarmerEntity(args, currentRow, years, valueChains);
-                       
-        //                BuildOnboardingArgs(args);
-
-        //                OnboardingRequestModel registrationModel = new OnboardingRequestModel
-        //                {
-        //                    Email = model.Email,
-        //                    PhoneNumber = model.PhoneNumber,
-        //                    Password = "Admin123@",
-        //                    Pin ="0000",
-        //                    FirstName = currentRow.FirstName,
-        //                    MiddleName = currentRow.MiddleName,
-        //                    LastName = currentRow.LastName,
-        //                };
-        //                // STEP 1: Create user
-        //                var user = await RegisterOrganizationUserAsync(registrationModel, args, role.Name);
-        //                userId = user.model.Id;
-
-        //                model.UserId = userId;
-        //                model.OnBoardedOn = dateTime;
-
-        //                if (!string.IsNullOrWhiteSpace(currentRow.NIN) || !string.IsNullOrWhiteSpace(currentRow.BVN))
-        //                {
-        //                    if (!string.IsNullOrWhiteSpace(currentRow.NIN))
-        //                        ValidateIdentifier(currentRow.NIN, "NIN");
-
-        //                    if (!string.IsNullOrWhiteSpace(currentRow.BVN))
-        //                        ValidateIdentifier(currentRow.BVN, "BVN");
-
-        //                    await _onboardingRepository.OnNINBVNUpdate(new Core.Models.Common.UserModel
-        //                    {
-        //                        Id = userId,
-        //                        Bvn = currentRow.BVN,
-        //                        NIN = model.NIN,
-        //                    });
-
-        //                    model.Level = FarmerLevel.Level3.ToString();
-        //                    model.BVN = model.BVN;
-        //                    model.NIN = model.NIN;
-        //                }
-        //                // STEP 2: Create farmer
-        //                var farmerResult = await _organizationRepository.CreateOrUpdateFarmer(model);
-
-        //                model.Id = farmerResult.data.Id;
-
-        //                // Non-critical steps
-        //                await LogActivity(user.model, args);
-        //                await EnsureWalletExists(user.model, business);
-        //                await _onboardingRepository.TrackUserRoleAssignment(user.model.Id, args.userType);
-        //                await GenerateAndSendOtp(user.model);
-
-        //                // await CreateOrganizationFarmerAsync(model, farmerArgs);
-
-        //                lock (result)
-        //                {
-        //                    result.Successful++;
-        //                }
-        //            }
-        //            catch (BaseException ex)
-        //            {
-        //                lock (result)
-        //                {
-        //                    result.Failed++;
-        //                    result.Errors.Add(new BulkOnboardingError
-        //                    {
-        //                        RowNumber = currentRowNumber,
-        //                        Email = currentRow.Email,
-        //                        Error = ex.Message
-        //                    });
-        //                }
-        //            }
-        //            catch (Exception ex)
-        //            {
-        //                _log.LogError(ex, "Error on row {Row}", currentRowNumber);
-
-        //                lock (result)
-        //                {
-        //                    result.Failed++;
-        //                    result.Errors.Add(new BulkOnboardingError
-        //                    {
-        //                        RowNumber = currentRowNumber,
-        //                        Email = currentRow.Email,
-        //                        Error = "Unexpected error"
-        //                    });
-        //                }
-        //            }
-        //            finally
-        //            {
-        //                semaphore.Release();
-        //            }
-        //        }));
-        //    }
-
-        //    await Task.WhenAll(tasks);
-
-        //    return result;
-        //}
 
         private static void BuildOnboardingArgs(OnBoardingArgs args)
         {
@@ -1630,7 +1425,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 await EnsureWalletExists(registerUser.model, business);
 
-                await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
+                //await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
 
                 return new CreateAgentResponseModel
                 {
@@ -1688,6 +1483,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 LastName = model.LastName,
                 DateOfBirth=model.DateOfBirth,
                 SignupMethod=model.SignupMethod,
+                Gender=model.Gender
             };
         }
         private async Task<(bool status, AgentModel data)> CreateAgent(
@@ -1759,12 +1555,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
 
-            //if (!model.LocationId.HasValue)
-            //    throw new BaseException(ExceptionType.BAD_REQUEST, "LocationId is required");
-
-            //if (!model.RoleId.HasValue)
-            //    throw new BaseException(ExceptionType.BAD_REQUEST, "RoleId is required");
-        }
+         }
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
         {
             var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
@@ -1894,7 +1685,7 @@ DateTimeOffset dateTime)
             {
                 await LogActivity(user, args);
                 await EnsureWalletExists(user, business);
-                await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
+               // await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
                 await SendDefaultCredentialChange(user, args.businessCode);
             }
             catch (Exception ex)
@@ -1957,54 +1748,7 @@ DateTimeOffset dateTime)
                 );
             }
         }
-        //private async Task GenerateAndSendOtp(OnboardingRequestModel model)
-        //{
-        //    var senderEmail = _configuration["Official:Email"];
-        //    var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
-        //        ? OtpTarget.Email
-        //        : OtpTarget.Phone;
-
-        //    var destination = otpTarget == OtpTarget.Email
-        //        ? model.Email
-        //        : model.PhoneNumber;
-
-        //    await _otpService.InvalidateActiveOtps(
-        //        model.Id,
-        //        otpTarget);
-
-        //    var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
-        //    {
-        //        UserId = model.Id,
-        //        Target = otpTarget,
-        //        Destination = destination,
-        //        Purpose = OtpPurpose.Onboarding,
-        //        ExpiryMinutes = 5
-        //    });
-
-        //    // ------------------ Send OTP ------------------
-        //    if (otpTarget == OtpTarget.Email)
-        //    {
-        //        //use aws
-        //        await _awsService.SendEmailAsync(
-        //            senderEmail,
-        //            destination,
-        //            "Confirm your account",
-        //            $"Your verification code is {model..Code}. It expires in 5 minutes.",
-        //            $"Your verification code is {otp.Code}. It expires in 5 minutes."
-        //            );
-        //        //await _sMSService.SendEmailAsync(
-        //        //    destination,
-        //        //    "Confirm your account",
-        //        //    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
-        //    }
-        //    else
-        //    {
-        //        await _sMSService.SendSmsAsync(
-        //                otp.Destination,
-        //                $"Your verification code is {otp.Code}. Expires in 5 minutes.");
-        //    }
-        //}
-
+     
         private async Task<CreateUserResult> RegisterFarmerOrFail(
          CreateFarmerRequest model,
          OnBoardingArgs args)
@@ -2208,6 +1952,19 @@ DateTimeOffset dateTime)
 
             return await _farmerRepository.DeactivateFarmerFromOrganization(args, message);
         }
+        public async Task<bool> DeactivateUser(
+             string membershipUserId,
+             string participantUserId,
+             MembershipParticipantType participantType,
+             string deactivatedByUserId,
+             string? reason)
+        {
+
+             await _membershipRepository.DeactivateUser(membershipUserId, participantUserId, participantType,
+                deactivatedByUserId, reason);
+
+            return true;
+        }
 
         #endregion FarmerMgt
 
@@ -2353,6 +2110,28 @@ DateTimeOffset dateTime)
 
             return await _farmerRepository.AssignFarmerToCooperatives(args, args.Id);
         }
+        public async Task<MemberShipModel> AssignBulkFarmerToCooperative(AssignmentArgs args)
+        {
+            var coop = await _membershipRepository.GetMembershipDetailByUserId(args.UserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Membership not found for the specified user.");
+
+            return await _farmerRepository.AssignBulkFarmerToCooperative(args, coop.Id);
+        }
+        public async Task<MemberShipModel> AssignBulkAgentToCooperative(AssignmentArgs args)
+        {
+            var coop = await _membershipRepository.GetMembershipDetailByUserId(args.UserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Membership not found for the specified user.");
+
+            return await _agentRepository.AssignBulkAgentToCooperative(args, coop.Id);
+        }
         public async Task<bool> RemoveFarmerFromCooperative(string userId, List<long> cooperativeId, string? organizationCode)
         {
             try
@@ -2391,7 +2170,7 @@ DateTimeOffset dateTime)
             {
                 await EnsureWalletExists(user, business);
                 await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
-                await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
+               // await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
                
             }
             catch (Exception ex)
@@ -2464,7 +2243,7 @@ DateTimeOffset dateTime)
                 BelongToBusinessCode = args.businessCode,
                 OrganizationId = model.OrganizationId,
                 OnboardedById = args.OnboardedByUserId,
-
+                RegistrationNumber=model.RegistrationNumber,
                 HasbeenAssignedAgent = agentIds.Any(),
 
                 MembershipLeaderFirstName = model.MembershipLeaderFirstName,
@@ -2488,7 +2267,8 @@ DateTimeOffset dateTime)
                     FirstName = model.MembershipLeaderFirstName,
                     MiddleName = model.MembershipLeaderMiddleName,
                     LastName = model.MembershipLeaderLastName,
-                    SignupMethod=model.SignupMethod
+                    SignupMethod=model.SignupMethod,
+                    Gender=model.Gender
                 }, args);
 
             if (!result.status)

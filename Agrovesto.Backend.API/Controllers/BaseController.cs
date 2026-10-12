@@ -9,6 +9,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
@@ -22,7 +23,10 @@ namespace Agrovesto.Backend.API.Controllers
     //[ApiController]
     //[Authorize]
     // [ValidateModelFilter]
-    public class BaseController : ControllerBase
+   
+    
+    
+    public class BaseController : ControllerBase, IAsyncActionFilter
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         protected const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
@@ -34,7 +38,19 @@ namespace Agrovesto.Backend.API.Controllers
             _httpContextAccessor = httpContextAccessor;
         }
         protected static readonly string[] RolePriority = { "Agent", "MemberShip" };
+        protected bool RequiresCredentialChange
+        {
+            get
+            {
+                var value = TryReadJwt()?
+                    .Claims.FirstOrDefault(c =>
+                        c.Type.Equals("RequiresCredentialChange", StringComparison.OrdinalIgnoreCase))
+                    ?.Value;
 
+                // claim is the string "True"/"False"
+                return bool.TryParse(value, out var required) && required;
+            }
+        }
         protected IActionResult? DetermineRoleViewAccess(SubscriptionQueryFilter filter)
         {
             // Organization is never itself a selectable "view" role 
@@ -447,6 +463,24 @@ namespace Agrovesto.Backend.API.Controllers
                 }
             }
         }
+        // Raw claim value (string)
+        private string? CurrentBusinessIdRaw =>
+            TryReadJwt()?
+                .Claims.FirstOrDefault(x => x.Type.Equals("BusinessId", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+
+        // Typed, nullable: null if the claim is missing or not a valid number
+        public long? CurrentBusinessId =>
+            long.TryParse(CurrentBusinessIdRaw, out var id) ? id : null;
+
+        // For endpoints that can't work without it
+        protected long RequireBusinessId()
+        {
+            var id = CurrentBusinessId;
+            if (id is null)
+                throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
+            return id.Value;
+        }
         public string Token
         {
             get
@@ -532,7 +566,29 @@ namespace Agrovesto.Backend.API.Controllers
             resolvedCode = match.OrganizationCode;
             return null;
         }
-    
+
+        [NonAction]
+        public virtual async Task OnActionExecutionAsync(
+            ActionExecutingContext context, ActionExecutionDelegate next)
+        {
+            var metadata = context.ActionDescriptor.EndpointMetadata;
+
+            var isExempt =
+                metadata.OfType<IAllowAnonymous>().Any() ||
+                metadata.OfType<AllowPendingCredentialChangeAttribute>().Any();
+
+            if (!isExempt && RequiresCredentialChange)
+            {
+                context.Result = Error(
+                    "CREDENTIAL_CHANGE_REQUIRED",
+                    "You must change your credentials before you can continue.",
+                    StatusCodes.Status403Forbidden);
+                return; // short-circuit: the action never runs
+            }
+
+            await next();
+        }
+
         public class OrganizationClaim
         {
             public string? OrganizationCode { get; set; }

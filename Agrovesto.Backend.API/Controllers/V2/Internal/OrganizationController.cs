@@ -25,6 +25,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [Route("api/v2/organization")]
     [ApiController]
     [Authorize]
+
+    [AllowPendingCredentialChange]
     public class OrganizationController : BaseController
     {
        private readonly IBusinessManager _businessManager;
@@ -1289,16 +1291,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        [HttpGet("membership-mgt-overview")]
-        public async Task<IActionResult> GetOrganizationMembershipDashboard([FromQuery] ListQueryParams query)
-        {
-            return await ExecuteAsync(async () =>
-            {
-                query.organizationCode = RequireOrganizationCode(query.organizationCode);
-                return await _organizationManager.GetOrganizationMembershipDashboard(query);
-            },
-                    overview => Ok(Wrap(overview)));
-        }
 
         [HttpPost("create-membership")]
 
@@ -1318,6 +1310,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 request => Ok(Success(request, request.Message)));
         }
 
+
+        [HttpGet("membership-mgt-overview")]
+        public async Task<IActionResult> GetOrganizationMembershipDashboard([FromQuery] ListQueryParams query)
+        {
+            return await ExecuteAsync(async () =>
+            {
+                query.organizationCode = RequireOrganizationCode(query.organizationCode);
+                return await _organizationManager.GetOrganizationMembershipDashboard(query);
+            },
+                    overview => Ok(Wrap(overview)));
+        }
+
         [HttpGet("memberships")]
         public async Task<IActionResult> GetCooperativesByOrganization([FromQuery] ListQueryParams query)
         {
@@ -1329,19 +1333,61 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  result => Ok(BuildPagedResponse(result, query.PageNumber, 10)));
         }
 
-        [HttpGet("membership/farmers")]
-        public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
+        [HttpGet("membership-detail")]
+        public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
         {
-            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
-            if (orgError != null) return orgError;
-            query.organizationCode = resolvedOrgCode;
             if (RequireField(query.UserId, "UserId") is { } error) return error;
 
             return await ExecuteAsync(
-                () => _membershipManager.GetMembershipFarmers(query),
-                result => Ok(BuildPagedResponse(result, query.PageNumber, 10)));
+                () =>
+                {
+                    return _membershipManager.GetMembershipDetailAsync(query);
+                },
+                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
 
         }
+        [HttpGet("membership-agents")]
+        public async Task<IActionResult> GetMembershipAgentsAsync([FromQuery] ListQueryParams query)
+        {
+            if (RequireField(query.UserId, "UserId") is { } error) return error;
+
+            return await ExecuteAsync(
+                () =>
+                {
+                    return _membershipManager.GetMembershipAgentsAsync(query.UserId, query);
+                },
+                result => Ok(Wrap(result.Data, ResponseMessages.Successful, ResponseMessages.NotFound)));
+
+        }
+        [HttpGet("membership-farmers")]
+        public async Task<IActionResult> GetMembershipFarmersAsync([FromQuery] ListQueryParams query)
+        {
+            if (RequireField(query.UserId, "UserId") is { } error) return error;
+
+            return await ExecuteAsync(
+                () =>
+                {
+                    return _membershipManager.GetMembershipFarmersAsync(query.UserId, query);
+                },
+                result => Ok(Wrap(result.Data, ResponseMessages.Successful, ResponseMessages.NotFound)));
+
+        }
+        [HttpGet("membership-financing-breakdown")]
+        public async Task<IActionResult> GetMembershipFinancingBreakdownAsync([FromQuery] ListQueryParams query)
+        {
+            if (RequireField(query.UserId, "UserId") is { } error) return error;
+
+            return await ExecuteAsync(
+                () =>
+                {
+                    return _membershipManager.GetMembershipFinancingBreakdownAsync(query.UserId, query);
+                },
+                result => Ok(Wrap(result.Data, ResponseMessages.Successful, ResponseMessages.NotFound)));
+
+        }
+
+
+
         [HttpPost("membership/create-farmer")]
         public async Task<IActionResult> CreateMembershipFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
         {
@@ -1361,19 +1407,59 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             request => Ok(Success(request, request.Message)));
         }
 
-        [HttpGet("membership-detail")]
-        public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
+         [HttpPut("membership/assign-farmers")]
+       
+        public async Task<IActionResult> AssignMultipleFarmer([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
         {
-            if (RequireField(query.UserId, "UserId") is { } error) return error;
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
+            return await ExecuteAsync(async () =>
+            {
+                if (!model.FarmerIds.Any())
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "No farmer selected.");
 
-            return await ExecuteAsync(
-                () =>
-                {
-                    return _membershipManager.GetMembershipDetailAsync(query);
-                },
-                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
+                args.OnboardedByUserId = CurrentUserId;
+                args.FarmerIds = model.FarmerIds;
+                return await _organizationManager.AssignBulkFarmerToCooperative(args);
+            },
+                    request => Ok(Success(request, ResponseMessages.Successful)));
+        }
+        [HttpPut("membership/assign-agents")]
+      
+        public async Task<IActionResult> AssignBulkAgentToCooperative([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
+        {
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
+            return await ExecuteAsync(async () =>
+            {
+                if (!model.AgentIds.Any())
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "No agent selected.");
+
+                args.OnboardedByUserId = CurrentUserId;
+                args.AgentIds = model.AgentIds;
+                return await _organizationManager.AssignBulkAgentToCooperative(args);
+            },
+                    request => Ok(Success(request, ResponseMessages.Successful)));
+        }
+        [HttpDelete("membership/deactivate-user")]
+        
+        public async Task<IActionResult> DeactivateUserFromMembership([FromQuery] MembershipParticipantType userType,
+            [FromQuery] string deactivatedUserId,
+            [FromQuery] string membershipUserId,
+        [FromBody] TaskDescription model)
+        {
+            
+            return await ExecuteAsync(async () =>
+            {
+               
+                return await _organizationManager.DeactivateUser(membershipUserId, deactivatedUserId, userType, CurrentUserId, model.Message);
+            },
+            request => Ok(Success(request, ResponseMessages.Successful)));
 
         }
+
 
         #endregion Membership
 
@@ -1601,6 +1687,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
                     request => Ok(Success(request, ResponseMessages.Successful)));
         }
+      
         [HttpPut("remove-farmer-from-cooperative")]
         public async Task<IActionResult> RemoveFarmerFromCooperative([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
         {

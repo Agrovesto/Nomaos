@@ -17,6 +17,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _migrationService = migrationService;
         }
 
+        [HttpPost("backfill-names")]
+        public async Task<IActionResult> BackfillNames([FromQuery] bool dryRun = true, CancellationToken ct = default)
+        {
+            var result = await _migrationService.RunUserNameBackfillAsync(dryRun, ct);
+            return result is null
+                ? Conflict("A backfill is already running.")
+                : Ok(result);
+        }
+
         [HttpPost("run-user")]
         public async Task<IActionResult> RunUserTableMigrationAsync()
         {            

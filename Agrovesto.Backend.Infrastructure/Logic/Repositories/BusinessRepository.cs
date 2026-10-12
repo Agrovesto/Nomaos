@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -69,6 +70,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
        OrganizationOnboardingModel orgModel,
        OnBoardingArgs args)
         {
+            var changed = new List<string>();
             // STEP 1: Resolve Business
             var business = await _context.Businesses
                 .FirstOrDefaultAsync(x => x.BusinessCode == args.businessCode);
@@ -85,8 +87,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                   //  x.OrganizationCode == orgModel.OrganizationCode ||
                     //x.CompanyName == orgModel.CompanyName
                     );
-           
-            if (orgExist != null)
+            var isNew = orgExist == null;
+            if (!isNew)
             {
                 if (string.IsNullOrEmpty(orgExist.OrganizationCode))
                 {
@@ -99,9 +101,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 UpdateOrganizationFields(orgExist, orgModel);
                 LinkBusinessIfMissing(orgExist, business.BusinessId);
 
+
+
                 await _context.SaveChangesAsync();
+                
                 return orgExist.ViewOnboardMap();
             }
+
 
             // STEP 3: Create new organization
             orgModel.OrganizationCode = await GenerateOrganizationCodeAsync(orgModel.CompanyName);
@@ -151,6 +157,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (orgModel.LgaId > 0)
                 orgExist.LgaId = orgModel.LgaId;
+            if (orgModel.WardId > 0)
+                orgExist.WardId = orgModel.WardId;
 
             if (!string.IsNullOrWhiteSpace(orgModel.CompanyAddress))
                 orgExist.CompanyAddress = orgModel.CompanyAddress;

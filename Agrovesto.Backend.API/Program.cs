@@ -7,6 +7,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -134,7 +135,7 @@ builder.Services.AddHostedService<BulkUploadBgService>();
 builder.Services.AddHostedService<FarmerOrganizationSyncService>();
 builder.Services.AddScoped<BulkOnboardingProcessor>();
 builder.Services.Configure<ReconciliationEmailSettings>(
-    builder.Configuration.GetSection("ReconciliationEmailSettings"));
+builder.Configuration.GetSection("ReconciliationEmailSettings"));
 
 builder.Services.AddIdentity<User, Role>(opt =>
 {
@@ -153,6 +154,15 @@ builder.Services.AddIdentity<User, Role>(opt =>
 //.AddUserManager<UserManager<User>>()
 .AddEntityFrameworkStores<DataContext>()
 .AddDefaultTokenProviders();
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<AdminPanelOptions>()
+    .Bind(builder.Configuration.GetSection("AdminPanel"))
+    .Validate(o => o.BusinessId > 0 && !string.IsNullOrWhiteSpace(o.PortalBaseUrl),
+              "AdminPanel:BusinessId and AdminPanel:PortalBaseUrl must be configured.")
+    .ValidateOnStart();
+
+
 builder.Services.AddAppServices(builder.Configuration);
 
 builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
@@ -207,6 +217,11 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.Configure<DataProtectionTokenProviderOptions>(o =>
+{
+    o.TokenLifespan = TimeSpan.FromMinutes(30); // pick what you want; the default is 24h
+});
+
 
 builder.Services.Configure<FormOptions>(o =>
 {
@@ -224,30 +239,73 @@ builder.Services.AddControllers().AddJsonOptions(opts =>
 
 });
 
-builder.Services.AddHttpClient();
+// Dedicated HttpClient for external health checks with a sensible timeout so a slow upstream
+// can never stall the /health endpoint. The default HttpClient timeout is 100s, which is
+// way too long for a health probe.
+builder.Services.AddHttpClient("health", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(5);
+    c.DefaultRequestHeaders.Add("User-Agent", "Agrovesto-HealthCheck/1.0");
+});
+
+// External health checks use failureStatus: Degraded so a single flaky third-party service
+// cannot take down the whole /health endpoint (matches the documented "graceful degradation"
+// design in HealthCheck-README.md). All non-DB checks are also bounded by a 5s per-check
+// timeout so a hung probe cannot stall the health response. Database and application
+// component checks remain strict (Unhealthy on failure) because they are tagged
+// "critical" and the load balancer should pull the instance out of rotation if
+// those are down.
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<DataContext>("Database", tags: new[] { "database", "critical" })
+    .AddDbContextCheck<DataContext>(
+        "Database",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: new[] { "database", "critical" })
     .AddSqlServer(
         connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
         name: "SQL Server Database",
         healthQuery: "SELECT 1",
         timeout: TimeSpan.FromSeconds(5),
         tags: new[] { "database", "critical" })
-    
-    .AddCheck<IdentityPassHealthCheck>("IdentityPass API", tags: new[] { "external" })
-    .AddCheck<TermiiSmsHealthCheck>("Termii SMS API", tags: new[] { "external" })
-    .AddCheck<CountryStateCityApiHealthCheck>("Country State City API", tags: new[] { "external" })
-    .AddCheck<SendGridHealthCheck>("SendGrid API", tags: new[] { "external" })
-    .AddS3(options =>
-    {
-
-        options.BucketName = builder.Configuration["AWS:BucketName"];
-        options.AccessKey = builder.Configuration["AWS:AccessKey"];
-        options.SecretKey = builder.Configuration["AWS:SecretKey"];
-    }, name: "AWS S3", tags: new[] { "external", "storage" })
-    
-    .AddCheck<ApiEndpointHealthCheck>("API Endpoints", tags: new[] { "api", "endpoints" })
-    .AddCheck<ApplicationComponentHealthCheck>("Application Components", tags: new[] { "components", "critical" });
+    .AddCheck<IdentityPassHealthCheck>(
+        "IdentityPass API",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<TermiiSmsHealthCheck>(
+        "Termii SMS API",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<CountryStateCityApiHealthCheck>(
+        "Country State City API",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<SendGridHealthCheck>(
+        "SendGrid API",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddS3(
+        options =>
+        {
+            options.BucketName = builder.Configuration["AWS:BucketName"];
+            options.AccessKey = builder.Configuration["AWS:AccessKey"];
+            options.SecretKey = builder.Configuration["AWS:SecretKey"];
+        },
+        name: "AWS S3",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external", "storage" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<ApiEndpointHealthCheck>(
+        "API Endpoints",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "api", "endpoints" },
+        timeout: TimeSpan.FromSeconds(10))
+    .AddCheck<ApplicationComponentHealthCheck>(
+        "Application Components",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: new[] { "components", "critical" });
 
 builder.Services.AddScoped<IdentityPassHealthCheck>();
 builder.Services.AddScoped<TermiiSmsHealthCheck>();
@@ -297,14 +355,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders =
         ForwardedHeaders.XForwardedFor |
         ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();   // trusts the header from any caller; fine only if the app isn't reachable
+    options.KnownProxies.Clear();
 
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-
-builder.Services.AddHealthChecks();
 
 var corsOrigins = builder.Configuration
     .GetValue<string>("CorsOrigins")?
@@ -331,7 +389,7 @@ var app = builder.Build();
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
 app.UseForwardedHeaders();
 
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Environment.IsProduction())
+if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
 
@@ -372,14 +430,36 @@ var customHealthResponseWriter = async (HttpContext context, HealthReport report
     await context.Response.WriteAsJsonAsync(result);
 };
 
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+//    await PermissionSeeder.SeedAsync(db);
+//}
+
+
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
+    // Match the documented "graceful degradation" design: a single degraded external
+    // dependency must not flip the whole endpoint to 503. Only critical system
+    // failures (e.g. Application Components) return Unhealthy -> 503.
+    ResultStatusCodes =
+    {
+        [HealthStatus.Healthy] = StatusCodes.Status200OK,
+        [HealthStatus.Degraded] = StatusCodes.Status200OK,
+        [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+    },
     ResponseWriter = async (ctx, report) => await customHealthResponseWriter(ctx, report)
 });
 
 app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("critical"),
+    ResultStatusCodes =
+    {
+        [HealthStatus.Healthy] = StatusCodes.Status200OK,
+        [HealthStatus.Degraded] = StatusCodes.Status200OK,
+        [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+    },
     ResponseWriter = async (ctx, report) => await customHealthResponseWriter(ctx, report)
 });
 app.UseHttpsRedirection();

@@ -8,6 +8,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public class OrganizationModel
     {
+        public string? Ward { get; set; }
         public long OrganizaionId { get; set; }
         public string? BusinessCode { get; set; }
         public string? OrganizationCode { get; set; }

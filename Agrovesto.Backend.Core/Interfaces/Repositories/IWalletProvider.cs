@@ -14,7 +14,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<WalletProviderModel> ChangeStatus(long id, ProviderStatus providerStatus);
         Task<WalletProviderModel> CreateProvider(WalletProviderModel model);
         Task<WalletProviderModel> Get(string providerCode);
-        Task<WalletProviderModel> Get(long providerId);
+        Task<WalletProviderModel> GetById(long providerId);
         Task<WalletProviderModel[]> GetAll();
         Task<WalletProviderModel[]> GetActiveProvider();
         Task<WalletProviderModel> GetByName(string name);

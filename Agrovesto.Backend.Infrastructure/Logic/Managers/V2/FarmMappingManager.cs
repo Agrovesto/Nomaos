@@ -354,6 +354,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var capturerDetails = await _onboardingRepository.FindUserById(fetchFarms.CreatedBy);
                 var farms = new FarmDetailsResponse
                 {
+                    FarmName= fetchFarms.Name,
                     DateAdded = fetchFarms.CreatedAt,
                     MappingStatus = EnumExtensions.GetDisplayName(fetchFarms.MappingStatus),
                     AddedById = fetchFarms.CreatedBy,

@@ -1,18 +1,17 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Net;
-using System.Text.Json;
 
 namespace Agrovesto.Backend.API.HealthChecks
 {
     public class ApiEndpointHealthCheck : IHealthCheck
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly ILogger<ApiEndpointHealthCheck> _logger;
 
-        public ApiEndpointHealthCheck(HttpClient httpClient, IConfiguration configuration, ILogger<ApiEndpointHealthCheck> logger)
+        public ApiEndpointHealthCheck(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<ApiEndpointHealthCheck> logger)
         {
-            _httpClient = httpClient;
+            _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _logger = logger;
         }
@@ -34,21 +33,24 @@ namespace Agrovesto.Backend.API.HealthChecks
                 new { Name = "API Documentation", Url = $"{baseUrl}/swagger/v1/swagger.json", ExpectedStatus = HttpStatusCode.OK }
             };
 
+            var client = _httpClientFactory.CreateClient("health");
+
             foreach (var endpoint in endpointsToCheck)
             {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     using var request = new HttpRequestMessage(HttpMethod.Get, endpoint.Url);
                     request.Headers.Add("User-Agent", "Agrovesto-HealthCheck/1.0");
-                    
-                    var response = await _httpClient.SendAsync(request, cancellationToken);
-                    var responseTime = DateTimeOffset.UtcNow.Subtract(DateTimeOffset.UtcNow).TotalMilliseconds;
+
+                    var response = await client.SendAsync(request, cancellationToken);
+                    stopwatch.Stop();
 
                     var endpointResult = new
                     {
                         Status = response.StatusCode.ToString(),
                         IsHealthy = response.StatusCode == endpoint.ExpectedStatus,
-                        ResponseTime = $"{Math.Abs(responseTime):F0}ms",
+                        ResponseTime = $"{stopwatch.ElapsedMilliseconds:F0}ms",
                         StatusCode = (int)response.StatusCode
                     };
 
@@ -64,16 +66,17 @@ namespace Agrovesto.Backend.API.HealthChecks
                 }
                 catch (Exception ex)
                 {
+                    stopwatch.Stop();
                     allHealthy = false;
                     var errorMessage = $"{endpoint.Name}: {ex.Message}";
                     issues.Add(errorMessage);
-                    
+
                     results[endpoint.Name] = new
                     {
                         Status = "Error",
                         IsHealthy = false,
                         Error = ex.Message,
-                        ResponseTime = "N/A"
+                        ResponseTime = $"{stopwatch.ElapsedMilliseconds:F0}ms"
                     };
 
                     _logger.LogWarning(ex, "Endpoint {EndpointName} check failed", endpoint.Name);
@@ -81,10 +84,10 @@ namespace Agrovesto.Backend.API.HealthChecks
             }
 
             // Check API controller availability (without authentication)
-            await CheckControllerAvailability(baseUrl, results, issues, cancellationToken);
+            await CheckControllerAvailability(client, baseUrl, results, issues, cancellationToken);
 
-            var description = allHealthy 
-                ? "All API endpoints are responding correctly" 
+            var description = allHealthy
+                ? "All API endpoints are responding correctly"
                 : $"Issues detected: {string.Join(", ", issues)}";
 
             var status = allHealthy ? HealthStatus.Healthy : HealthStatus.Degraded;
@@ -92,16 +95,17 @@ namespace Agrovesto.Backend.API.HealthChecks
             return new HealthCheckResult(status, description, data: results);
         }
 
-        private async Task CheckControllerAvailability(string baseUrl, Dictionary<string, object> results, List<string> issues, CancellationToken cancellationToken)
+        private async Task CheckControllerAvailability(HttpClient client, string baseUrl, Dictionary<string, object> results, List<string> issues, CancellationToken cancellationToken)
         {
             // Check if main API controllers are accessible (they should return 401 for unauthorized requests, not 404)
+            // Use lightweight public ping endpoints to verify controller availability
             var controllerEndpoints = new[]
             {
-                new { Name = "Authentication API", Url = $"{baseUrl}/api/auth/login", Method = HttpMethod.Post },
-                new { Name = "User API", Url = $"{baseUrl}/api/user/update-profile", Method = HttpMethod.Post },
-                new { Name = "Location API", Url = $"{baseUrl}/api/location", Method = HttpMethod.Get },
-                new { Name = "Business API", Url = $"{baseUrl}/api/business", Method = HttpMethod.Get },
-                new { Name = "Farm Management API", Url = $"{baseUrl}/api/farm", Method = HttpMethod.Get }
+                new { Name = "Authentication API", Url = $"{baseUrl}/api/v2/account/ping", Method = HttpMethod.Get },
+                new { Name = "User API", Url = $"{baseUrl}/api/v2/user/ping", Method = HttpMethod.Get },
+                new { Name = "Location API", Url = $"{baseUrl}/api/v2/location/ping", Method = HttpMethod.Get },
+                new { Name = "Business API", Url = $"{baseUrl}/api/v2/business/ping", Method = HttpMethod.Get },
+                new { Name = "Farm Management API", Url = $"{baseUrl}/api/v2/farm/ping", Method = HttpMethod.Get }
             };
 
             foreach (var endpoint in controllerEndpoints)
@@ -110,12 +114,12 @@ namespace Agrovesto.Backend.API.HealthChecks
                 {
                     using var request = new HttpRequestMessage(endpoint.Method, endpoint.Url);
                     request.Headers.Add("User-Agent", "Agrovesto-HealthCheck/1.0");
-                    
-                    var response = await _httpClient.SendAsync(request, cancellationToken);
-                    
+
+                    var response = await client.SendAsync(request, cancellationToken);
+
                     // For API endpoints, we expect either 200 (if public) or 401 (if auth required)
                     // 404 would indicate the controller/endpoint doesn't exist
-                    var isHealthy = response.StatusCode != HttpStatusCode.NotFound && 
+                    var isHealthy = response.StatusCode != HttpStatusCode.NotFound &&
                                    response.StatusCode != HttpStatusCode.InternalServerError;
 
                     results[$"Controller_{endpoint.Name}"] = new
@@ -166,11 +170,21 @@ namespace Agrovesto.Backend.API.HealthChecks
                 return configuredUrl.TrimEnd('/');
             }
 
-            // Default to localhost with common ports
+            // Fall back to ASPNETCORE_URLS or a sensible default.
+            var aspnetCoreUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+            if (!string.IsNullOrEmpty(aspnetCoreUrls))
+            {
+                var first = aspnetCoreUrls.Split(';', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                if (!string.IsNullOrEmpty(first))
+                {
+                    return first.TrimEnd('/');
+                }
+            }
+
             var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             if (environment == "Development")
             {
-                return "http://localhost:5000"; // or https://localhost:5001
+                return "https://localhost:5001";
             }
 
             // For production, try to determine from server

@@ -18,6 +18,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [Route("api/v2/memberships")]
     [ApiController]
     [Authorize]
+
+    [AllowPendingCredentialChange]
     public class MembershipController : BaseController
     {
 
@@ -478,7 +480,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 model.Id = args.UserId;
-                 await _onBoardingManager.CreateCooperativeProfileAsync(model, args);
+                 await _onBoardingManager.UpdateCooperativeProfileAsync(model, args);
 
 
                 return Ok(new Response<CreateMembershipResponseModel>()
