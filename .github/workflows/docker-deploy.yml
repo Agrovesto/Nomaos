@@ -13,7 +13,6 @@ on:
 
   push:
     branches:
-      - master
       - devops
 
   workflow_dispatch:
@@ -506,4 +505,3 @@ jobs:
             echo "| Actor | \`${{ github.actor }}\` |"
             echo "| Result | ${{ job.status }} |"
           } >> "$GITHUB_STEP_SUMMARY"
-
