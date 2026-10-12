@@ -12,6 +12,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon;
+using DocumentFormat.OpenXml.ExtendedProperties;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -32,7 +33,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     {
         private readonly IOnBoardingManager _onBoardingManager;
         private readonly IAdminDashboardManager _adminDashboardManager;
-
+        private readonly IAdminFarmerManager _farmerManager;
         public readonly IAdminUserManagementManager _adminUserManagementManager;
         public static string AdminUserType { get; private set; } = UserType.Agrovesto.ToString();
         private const int MaxCustomRangeDays = 366 * 5;
@@ -41,9 +42,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
           //  IAuthenticationRepository authenticationRepository,
             IOnBoardingManager onBoardingManager,
             IAdminDashboardManager adminDashboardManager,
+            IAdminFarmerManager farmerManager,
             IAdminUserManagementManager adminUserManagementManager) : base(httpContextAccessor)
         {
-           // _authenticationRepository = authenticationRepository;
+            _farmerManager = farmerManager;
+            // _authenticationRepository = authenticationRepository;
             _onBoardingManager = onBoardingManager;
             _adminDashboardManager = adminDashboardManager;
             _adminUserManagementManager = adminUserManagementManager;
@@ -98,110 +101,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
-
-        ///// <summary>
-        ///// Allow a SystemAdmin user to create admin users (other admins).
-        ///// </summary>
-        //[HttpPost("auth/create-admin")]
-        //[Authorize]
-        //public async Task<IActionResult> CreateAdmin([FromBody] UserModel model, [FromQuery] string? roleName, [FromQuery] string businessCode)
-        //{
-        //    if (!ModelState.IsValid)
-        //    {
-        //        return BadRequest(new Response<Dictionary<string, string>>()
-        //        {
-        //            Message = "Validation failed.",
-        //            Succeeded = false,
-        //            Data = ModelState
-        //                .Where(ms => ms.Value!.Errors.Any())
-        //                .ToDictionary(
-        //                    ms => ms.Key,
-        //                    ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
-        //                )
-        //        });
-        //    }
-
-        //    // Only allow SystemAdmin to perform this action
-        //    if (!CurrentUserRoles.Contains("SystemAdmin", StringComparer.OrdinalIgnoreCase) || !CurrentUserRoles.Contains("Super Admin",StringComparer.OrdinalIgnoreCase))
-        //        return Unauthorized(new Response<string> { Succeeded = false, Message = ResponseMessages.AccessDenied, Code = ResponseCodes.AccessDenied });
-
-        //    try
-        //    {
-        //        var role =roleName;
-        //        model.UserType = AdminUserType;
-        //        model.BusinessCode = businessCode;
-        //        var createUser = await _onBoardingManager.RegisterAdmin(model, role);
-
-        //        return Ok(new Response<(UserModel model, bool status, string message)>()
-        //        {
-        //            Code = ResponseCodes.Success,
-        //            Succeeded = createUser.status,
-        //            Message = createUser.message,
-        //            Data = createUser
-        //        });
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        return StatusCode((int)ex.HttpStatusCode, new Response<string>
-        //        {
-        //            Message = ex.ExceptionMessage,
-        //            Succeeded = false,
-        //        });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(500, new Response<string>
-        //        {
-        //            Message = ex.Message,
-        //            Succeeded = false,
-        //        });
-        //    }
-        //}
-
-        ///// <summary>
-        ///// Allow a SystemAdmin user to create other users using the onboarding flow.
-        ///// </summary>
-        ////[HttpPost("auth/create-user")]
-        ////[Authorize]
-        ////public async Task<IActionResult> CreateUserBySuperAdmin([FromBody] Agrovesto.Backend.Core.V2.Onboarding.OnboardingRequestModel model,
-        ////    [FromQuery] Agrovesto.Backend.Core.V2.Onboarding.OnBoardingArgs args)
-        ////{
-        ////    if (!ModelState.IsValid)
-        ////        return ValidationProblemResponse();
-
-        ////    if (!CurrentUserRoles.Contains("SystemAdmin", StringComparer.OrdinalIgnoreCase))
-        ////        return Unauthorized(new Response<string> { Succeeded = false, Message = ResponseMessages.AccessDenied, Code = ResponseCodes.AccessDenied });
-
-        ////    try
-        ////    {
-        ////        args.OnboardedByUserId = CurrentUserId;
-        ////        // Preserve organization resolution behavior from other onboarding endpoints
-        ////        var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
-        ////        if (orgError != null) return orgError;
-        ////        args.organizationCode = resolvedOrgCode;
-        ////        args.userType = AdminUserType;
-        ////        var result = await _onBoardingManager.CreateBusinessUser(model, args);
-        ////        return Ok(Success(result, result.Message, ResponseMessages.Successful));
-        ////    }
-        ////    catch (BaseException ex)
-        ////    {
-        ////        return StatusCode((int)ex.HttpStatusCode, new Response<string>
-        ////        {
-        ////            Message = ex.ExceptionMessage,
-        ////            Succeeded = false,
-        ////        });
-        ////    }
-        ////    catch (Exception ex)
-        ////    {
-        ////        return StatusCode(500, new Response<string>
-        ////        {
-        ////            Message = ex.Message,
-        ////            Succeeded = false,
-        ////        });
-        ////    }
-        ////}
-
-       
+               
         
         [HttpPost("auth/login")]
         [AllowAnonymous]
@@ -477,6 +377,94 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 Message = "User updated successfully.",
                 Data = result.Data
             });
+        }
+
+
+        [HttpGet("farmer/summary")]
+        public async Task<IActionResult> Summary()
+        {
+            var businessId = RequireBusinessId();
+
+            var data = await _farmerManager.GetSummaryAsync(businessId);
+            return Ok(new Response<FarmerSummaryDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/list")]
+        public async Task<IActionResult> List([FromQuery] FarmerListQuery query)
+        {
+            query.BusinessId = RequireBusinessId();
+            var data = await _farmerManager.GetFarmersAsync(query);
+            return Ok(new Response<PagedResult<FarmerListItemDto>> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/export")]
+        public async Task<IActionResult> Export([FromQuery] FarmerListQuery query, [FromQuery] string format = "csv")
+        {
+            query.BusinessId = RequireBusinessId();
+            var rows = await _farmerManager.GetAllForExportAsync(query);
+            var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmm");
+
+            return format.Equals("xlsx", StringComparison.OrdinalIgnoreCase)
+                ? File(FarmerExport.ToXlsx(rows),
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       $"farmers-{stamp}.xlsx")
+                : File(FarmerExport.ToCsv(rows), "text/csv", $"farmers-{stamp}.csv");
+        }
+
+        [HttpGet("farmer/{userId:string}")]
+        public async Task<IActionResult> Details(string userId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetFarmerDetailsAsync(businessId, userId);
+            if (data == null)
+                return NotFound(new Response<FarmerDetailsDto> { Succeeded = false, Message = "Farmer not found." });
+
+            return Ok(new Response<FarmerDetailsDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpPost("farmer/{userId:string}/suspend")]
+        public async Task<IActionResult> Suspend(string userId, [FromBody] SuspendFarmerRequest request)
+        {
+            request.BusinessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var ok = await _farmerManager.SuspendFarmerAsync(request.BusinessId, userId, actingUserId, request.Reason);
+
+            return ok
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer suspended." })
+                : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already suspended." });
+        }
+
+        [HttpGet("farmer/{userId:string}/farms/summary")]
+        public async Task<IActionResult> FarmSummary(string userId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetFarmSummaryAsync(businessId, userId);
+            if (data == null)
+                return NotFound(new Response<FarmSummaryDto> { Succeeded = false, Message = "Farmer not found." });
+
+            return Ok(new Response<FarmSummaryDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/{userId:string}/farms")]
+        public async Task<IActionResult> Farms(string userId,
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetFarmsAsync(businessId, userId, page, pageSize);
+            if (data == null)
+                return NotFound(new Response<PagedResult<FarmListItemDto>> { Succeeded = false, Message = "Farmer not found." });
+
+            return Ok(new Response<PagedResult<FarmListItemDto>> { Succeeded = true, Data = data });
+        }
+        [HttpGet("farmer/{userId:string}/organization-membership")]
+        public async Task<IActionResult> OrganizationMembership(string userId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetOrganizationMembershipAsync(businessId, userId);
+            if (data == null)
+                return NotFound(new Response<FarmerOrgMembershipDto> { Succeeded = false, Message = "Farmer not found." });
+
+            return Ok(new Response<FarmerOrgMembershipDto> { Succeeded = true, Data = data });
         }
     }
 }

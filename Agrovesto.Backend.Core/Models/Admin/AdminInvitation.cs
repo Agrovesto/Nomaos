@@ -19,5 +19,5 @@ namespace Agrovesto.Backend.Core.Models.Admin
         string? Search, string? Status, string? Role, string? Department,
         int pageNumber = 1, int PageSize = 20);
 
-    public record PagedResult<T>(IReadOnlyList<T> Items, int pageNumber, int PageSize, int TotalCount);
+    public record PagedResult<T>(IReadOnlyList<T> Items, int pageNumber, int pageSize, int TotalCount);
 }

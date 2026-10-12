@@ -9,7 +9,13 @@ using System.Threading.Tasks;
 namespace Agrovesto.Backend.Core.Enums
 {
     public enum AdminUserStatus { Active = 1, Suspended = 2, Deactivated = 3, Pending = 4 }
-
+    public enum FarmerStatus { Active = 1, Suspended = 2, Deactivated = 3, Pending = 4 }
+    public enum MappingStatus
+    {
+        UnMapped, //no coordinates added
+        Mapped, //coordinates added but not verified
+        Verified // verified
+    }
     public enum MembershipParticipantType
     {
         Farmer=1,

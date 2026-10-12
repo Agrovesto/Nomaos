@@ -25,6 +25,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
 using Agrovesto.Backend.Infrastructure.Logic.Services.RolePermissionService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
+using Amazon.SimpleNotificationService;
 
 namespace Agrovesto.Backend.API.Extensions
 {
@@ -43,11 +44,12 @@ namespace Agrovesto.Backend.API.Extensions
 
             services.AddScoped<IHttpService, HttpService>();
             services.Configure<SerilogServiceOptions>(
-    configuration.GetSection("AppLogs"));
+            configuration.GetSection("AppLogs"));
             //services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
 
             services.AddSingleton<ILogService, SerilogService>();
-           
+            services.AddAWSService<IAmazonSimpleNotificationService>();
+
 
             services.AddScoped<IBulkFarmerUploadService, BulkFarmerUploadService>();
             services.AddScoped<IBulkMembershipValidator, BulkMembershipValidator>();
@@ -211,6 +213,8 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IRoleAccessManager, RoleAccessManager>();
           services.AddScoped<IAdminAuditLogger, AdminAuditLogger>();
            services.AddScoped<IClientInfoProvider, ClientInfoProvider>();
+           services.AddScoped<IAdminFarmerManager, AdminFarmerManager>();
+           services.AddScoped<IInputFinanceReader, EfInputFinanceReader>();
 
         }
     }

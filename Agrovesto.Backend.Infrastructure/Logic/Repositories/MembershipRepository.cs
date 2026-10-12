@@ -85,6 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         farmerCooperative.IsActive = false;
                         farmerCooperative.DeactivationReason = reason;
                         farmerCooperative.DeactivatedByUserId = deactivatedByUserId;
+                        
                         farmerCooperative.DeactivatedOn = DateTimeOffset.Now;
                         break;
                     }
