@@ -8,14 +8,6 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Enums
 {
-    public enum AdminUserStatus { Active = 1, Suspended = 2, Deactivated = 3, Pending = 4 }
-    public enum FarmerStatus { Active = 1, Suspended = 2, Deactivated = 3, Pending = 4 }
-    public enum MappingStatus
-    {
-        UnMapped, //no coordinates added
-        Mapped, //coordinates added but not verified
-        Verified // verified
-    }
     public enum MembershipParticipantType
     {
         Farmer=1,
@@ -38,11 +30,6 @@ namespace Agrovesto.Backend.Core.Enums
         OTP,
         LOGIN,
         RESET_PASSWORD,
-        FORGOT_CREDENTIAL,      // per account (email/phone)
-        FORGOT_CREDENTIAL_IP,
-        RESEND_CREDENTIAL_COOLDOWN, // e.g. 1 request / 60 seconds per account
-        RESEND_CREDENTIAL,          // e.g. 3 requests / 10 minutes per account
-        RESEND_CREDENTIAL_IP
     }
     public enum InventoryTransactionType
     {

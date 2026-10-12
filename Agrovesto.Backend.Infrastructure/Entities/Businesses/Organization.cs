@@ -74,8 +74,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long? LgaId { get; set; }
 
         public LGA? LGA { get; set; }
-        public Ward? Ward { get; set; }
-        public long? WardId { get; set; }
 
         public string? CompanyAddress { get; set; }
 

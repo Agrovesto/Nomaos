@@ -196,8 +196,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpGet("packages")]
         public async Task<IActionResult> GetPackagesAsync(
-            [FromQuery] InputPackageFilterRequest filter,
-            [FromQuery] ListQueryParams args)
+      [FromQuery] InputPackageFilterRequest filter,
+      [FromQuery] ListQueryParams args)
         {
             args.UserId = CurrentUserId;
 
@@ -221,8 +221,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ResponseCodes.Success
             ));
         }
-        
-        
         [HttpGet("package")]
         public async Task<IActionResult> GetPackageByIdAsync([FromQuery] ListQueryParams args)
         {

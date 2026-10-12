@@ -38,10 +38,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class UsersProfileResponse
     {
-        public string? FirstName { get; set; }
-        public string? MiddleName { get; set; }
-        public string? LastName { get; set; }
-        // Name stays, now computed from the parts
         public KYCDto KYC { get; set; }
         public string UserId { get; set; }
         public string UserType { get; set; }
@@ -233,19 +229,14 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? ActivityName { get; set; }
         public string? Id { get; set; }
         public string? PhoneNumber { get; set; }
-       [MaxLength(15, ErrorMessage = "LastName cannot exceed 15 characters.")]
         public string? LastName { get; set; }
         public string? FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string? Pin { get; set; }
-        public string? Gender { get; set; }
         public string? DefaultPin { get; set; }
         public string? Password { get; set; }
         public string? DefaultPassword { get; set; }
-
-        [RegularExpression(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", ErrorMessage = "Invalid email format.")]
         public string? Email { get; set; }
-       
         public string? Bvn { get; set; }
         public string? Nin { get; set; }
         public string? DateOfBirth { get; set; }
@@ -259,7 +250,16 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         SecuritySetup,
         Completed
     }
-  
+    public class RefreshToken
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string UserId { get; set; }
+        public string Token { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public bool IsRevoked { get; set; }
+        public string DeviceId { get; set; }
+    }
+
     public class LoginRequestModel
     {
         public string Identifier { get; set; } // username | email | phone
@@ -422,7 +422,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? ModifiedBy { get; set; }
 
         public string? FirstName { get; set; }
-        public string? RegistrationNumber { get; set; }
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
         public string? FullName { get; set; }

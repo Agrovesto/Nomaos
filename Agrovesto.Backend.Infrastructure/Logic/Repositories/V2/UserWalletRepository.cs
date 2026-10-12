@@ -58,7 +58,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task ResolveReconciliation(long reconciliationId, string resolvedBy, string resolutionNote, ReconciliationStatus finalStatus);
         Task AdjustWalletBalanceAsync(long walletId, decimal delta);
         Task MarkPendingReconciliation(string reference, string reason);
-       }
+    }
     public class UserWalletRepository : IUserWalletRepository
     {
         private static readonly SubscriptionStatus[] ActiveLoanStatuses =
@@ -97,8 +97,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
-       
-
         public async Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args)
         {
 
@@ -178,7 +176,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
        
-        
         
         public async Task<UserWallet?> GetActiveWalletForUser(string userId, string businessCode)
         {

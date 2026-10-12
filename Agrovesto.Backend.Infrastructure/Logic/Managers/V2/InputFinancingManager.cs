@@ -35,7 +35,6 @@ using Hangfire;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.VisualBasic;
 using PhoneNumbers;
 using StackExchange.Redis;
@@ -107,7 +106,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
     public class InputFinancingManager : IInputFinancingManager
     {
-        private readonly ILogger<InputFinancingManager> _logger;
         private readonly IUserWalletRepository _userWalletRepository;
         private readonly IBusinessRepository _businessRepository;
         private readonly IInputFinancingRepository _inputFinancingRepository;
@@ -135,12 +133,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             DataContext context, IMTNMomo mtnMomoService,
             IAWSRekognitionManager imageRecognitionService,
             IUserWalletRepository walletTransactionRepository,
-            IFarmerRepository farmerRepository,
-            ILogger<InputFinancingManager> logger   
+            IFarmerRepository farmerRepository
 )
-        { 
-
-            _logger = logger;
+        {
             _walletTransactionRepository = walletTransactionRepository;
             _userWalletRepository = userWalletRepository;
             _providerRepo = providerRepo;
@@ -289,7 +284,7 @@ request.PaybackWalletId.Value == 0))
             if (package == null)
                 throw new Exception($"Package not found: {query.Id}");
 
-            if (package.IsRepaymentWalletConfigured && package.CreatedBy == query.UserId)
+            if (package.IsRepaymentWalletConfigured)
             {
                 if (package.WalletProviderId == null)
                     throw new BaseException(
@@ -300,7 +295,7 @@ request.PaybackWalletId.Value == 0))
                 var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
                 {
                     Id = package.WalletProviderId,
-                    UserId = package.CreatedBy,
+                    UserId = query.UserId,
                     businessCode = query.businessCode
                 });
 
@@ -313,8 +308,8 @@ request.PaybackWalletId.Value == 0))
                 package.RepaymentWallet = new InputPackageRepaymentWallet
                 {
                     WalletId = userWallet.Id,
-                   // WalletName = userWallet.WalletNumber,
-                    WalletNumber = EncryptionUtil.MaskSensitiveNumber(userWallet.WalletNumber),
+                    WalletName = userWallet.WalletNumber,
+                    WalletNumber = userWallet.WalletNumber,
                     WalletProvider = userWallet.ProviderName
                 };
             }
@@ -895,13 +890,6 @@ RepaymentFrequency frequency)
 
             var requestProvider = await _providerRepo.GetById(request.WalletProviderId);
 
-            _logger.LogInformation(
-   "Commitment check: End={End}, Now={Now}, Expired={Expired}, SubscriptionId={Id}",
-   subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate,
-   DateTimeOffset.UtcNow,
-   subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate < DateTimeOffset.UtcNow,
-   subscription.Id);
-
             ValidateSubscription(subscription, request, configredProvider, requestProvider);
 
             var amountToPay = await CalculateAmountToPayAsync(request, subscription);
@@ -941,13 +929,12 @@ RepaymentFrequency frequency)
                     x.SubscriberUserId == args.SubscriberUserId);
         }
 
-        private static void ValidateSubscription(
+        private static async Task ValidateSubscription(
             InputPackageSubscription subscription,
             RecordCommitmentPaymentRequest request, WalletProviderModel configuredProvider, WalletProviderModel requestProvider)
         {
-           
-
-            if (configuredProvider == null)
+            
+            if(configuredProvider == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Configured package wallet provider not found");
             if(requestProvider == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Request wallet provider not found");
@@ -965,11 +952,8 @@ RepaymentFrequency frequency)
             if (subscription.InputPackage.CommitmentPlan == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment plan not found for this input package");
 
-            var end = subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate;
-       
-            if (end.HasValue && end.Value < DateTimeOffset.UtcNow)
+            if (subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate < DateTimeOffset.UtcNow)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment Payment cut off window has expired, you can no longer make commitmen fee, reach out to your admin");
-
 
 
             if (subscription.Status == SubscriptionStatus.PendingApproval)
@@ -2018,19 +2002,10 @@ RepaymentFrequency frequency)
                     if (subscriberDetails == null)
                         throw new DisbursementException("User details not found.");
 
-                    if (subscriberDetails.IsNinVerified && (request.NIN != subscriberDetails.NIN))
-                    {
+                    if (request.NIN != subscriberDetails.NIN)
                         throw new BaseException(ExceptionType.CONFLICT,
-                            "Supplied NIN does not match our records. " 
-                            ); 
-                    }
-
-                    if (!subscriberDetails.IsNinVerified)
-                    {
-                        throw new BaseException(ExceptionType.CONFLICT,
-                            "NIN verification is required before disbursement. " +
-                            "Please complete NIN verification and try again.");
-                    }
+                            "Supplied NIN does not match our records. " +
+                            "Kindly update the subscriber's profile.");
 
                     var farmerImage = await _farmerRepository.GetFarmerImage(
                         query.RequestForUserId,
