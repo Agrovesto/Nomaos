@@ -365,7 +365,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
                 );   // here
             // Send after commit so a mail outage never leaves a half-created user
-            var sent = await TrySendInviteAsync(user!, rawToken, expires);
+            var sent = await TrySendInviteAsync(user!, rawToken, expires, role.Name);
 
             return new(new InviteAdminUserResponse(user!.Id, user.AdminCode!, "Pending", sent, expires), null, 201);
         }
@@ -390,16 +390,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             await _audit.LogAsync("InviteResent", invitedByUserId, user.Id, "Resent login invite",AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
 
 
-            var sent = await TrySendInviteAsync(user, rawToken, invite.ExpiresAt);
+            var sent = await TrySendInviteAsync(user, rawToken, invite.ExpiresAt, null);
             return new(new InviteAdminUserResponse(user.Id, user.AdminCode!, "Pending", sent, invite.ExpiresAt), null, 200);
         }
 
-        private async Task<bool> TrySendInviteAsync(User user, string rawToken, DateTimeOffset expires)
+        private async Task<bool> TrySendInviteAsync(User user, string rawToken, DateTimeOffset expires, string role)
         {
             try
             {
                 var senderEmail = _configuration["Official:Email"];
-                var link = $"{_opts.PortalBaseUrl.TrimEnd('/')}/accept-invite?token={Uri.EscapeDataString(rawToken)}";
+                var link = $"{_opts.PortalBaseUrl.TrimEnd('/')}/accept-invite?token={Uri.EscapeDataString(rawToken)}&name={Uri.EscapeDataString(user.FirstName)} {Uri.EscapeDataString(user.LastName)}&email={Uri.EscapeDataString(user.Email)}&role={Uri.EscapeDataString(role)}";
                 var name = WebUtility.HtmlEncode(user.FirstName);
                 var body = $@"<p>Hello {name},</p>
 <p>You have been invited to join the NomaOS Admin Panel.</p>

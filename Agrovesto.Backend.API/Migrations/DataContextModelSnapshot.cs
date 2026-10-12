@@ -1252,6 +1252,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<double>("PinnedLongitude")
                         .HasColumnType("float");
 
+                    b.Property<string>("PrimaryCrop")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<double>("SizeInHectares")
                         .HasColumnType("float");
 
@@ -1713,6 +1716,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("FarmerCategory")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("FarmerStatus")
+                        .HasColumnType("int");
+
                     b.Property<string>("Gender")
                         .HasColumnType("nvarchar(max)");
 
@@ -1745,7 +1751,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Ward")
                         .HasColumnType("nvarchar(max)");
@@ -1757,6 +1763,8 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OnBoardedOn")
                         .HasDatabaseName("IX_Farmers_OnBoardedOn");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Farmers");
                 });
@@ -7555,6 +7563,17 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("Farm");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Farmer", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerAgent", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Agent", "Agent")
@@ -8536,7 +8555,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
-                        .WithMany()
+                        .WithMany("UserBusinesses")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -8888,6 +8907,8 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.User", b =>
                 {
+                    b.Navigation("UserBusinesses");
+
                     b.Navigation("UserOrganizations");
 
                     b.Navigation("UserRoles");

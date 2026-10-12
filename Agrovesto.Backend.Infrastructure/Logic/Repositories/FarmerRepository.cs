@@ -177,10 +177,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                 try
                 {
-                    var farmerExists = await _context.Farmers
-                        .AnyAsync(f => f.Id == args.Id);
-
-                    if (!farmerExists)
+                    var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.Id == args.Id);
+                    if (farmer == null)
                         return false;
 
                     var now = DateTimeOffset.UtcNow;
@@ -229,7 +227,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         membership.DeactivatedByUserId = args.OnboardedByUserId;
                         membership.DeactivationReason = reason;
                     }
-
+                 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
