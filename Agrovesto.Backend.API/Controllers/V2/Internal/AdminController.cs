@@ -411,7 +411,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 : File(FarmerExport.ToCsv(rows), "text/csv", $"farmers-{stamp}.csv");
         }
 
-        [HttpGet("farmer/{userId:string}")]
+        [HttpGet("farmer/{userId}")]
         public async Task<IActionResult> Details(string userId)
         {
             var businessId = RequireBusinessId();
@@ -422,7 +422,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return Ok(new Response<FarmerDetailsDto> { Succeeded = true, Data = data });
         }
 
-        [HttpPost("farmer/{userId:string}/suspend")]
+        [HttpPost("farmer/{userId}/suspend")]
         public async Task<IActionResult> Suspend(string userId, [FromBody] SuspendFarmerRequest request)
         {
             request.BusinessId = RequireBusinessId();
@@ -434,7 +434,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already suspended." });
         }
 
-        [HttpGet("farmer/{userId:string}/farms/summary")]
+        [HttpGet("farmer/{userId}/farms/summary")]
         public async Task<IActionResult> FarmSummary(string userId)
         {
             var businessId = RequireBusinessId();
@@ -445,7 +445,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return Ok(new Response<FarmSummaryDto> { Succeeded = true, Data = data });
         }
 
-        [HttpGet("farmer/{userId:string}/farms")]
+        [HttpGet("farmer/{userId}/farms")]
         public async Task<IActionResult> Farms(string userId,
             [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
@@ -456,7 +456,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(new Response<PagedResult<FarmListItemDto>> { Succeeded = true, Data = data });
         }
-        [HttpGet("farmer/{userId:string}/organization-membership")]
+        [HttpGet("farmer/{userId}/organization-membership")]
         public async Task<IActionResult> OrganizationMembership(string userId)
         {
             var businessId = RequireBusinessId();
