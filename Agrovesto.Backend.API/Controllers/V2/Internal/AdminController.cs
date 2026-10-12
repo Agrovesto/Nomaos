@@ -456,15 +456,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(new Response<PagedResult<FarmListItemDto>> { Succeeded = true, Data = data });
         }
-        [HttpGet("farmer/{userId}/organization-membership")]
-        public async Task<IActionResult> OrganizationMembership(string userId)
-        {
-            var businessId = RequireBusinessId();
-            var data = await _farmerManager.GetOrganizationMembershipAsync(businessId, userId);
-            if (data == null)
-                return NotFound(new Response<FarmerOrgMembershipDto> { Succeeded = false, Message = "Farmer not found." });
+        //[HttpGet("farmer/{userId}/organization-membership")]
+        //public async Task<IActionResult> OrganizationMembership(string userId)
+        //{
+        //    var businessId = RequireBusinessId();
+        //    var data = await _farmerManager.GetOrganizationMembershipAsync(businessId, userId);
+        //    if (data == null)
+        //        return NotFound(new Response<FarmerOrgMembershipDto> { Succeeded = false, Message = "Farmer not found." });
 
-            return Ok(new Response<FarmerOrgMembershipDto> { Succeeded = true, Data = data });
-        }
+        //    return Ok(new Response<FarmerOrgMembershipDto> { Succeeded = true, Data = data });
+        //}
     }
 }
