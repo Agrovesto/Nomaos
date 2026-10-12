@@ -89,7 +89,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? State { get; set; }
         public string? Lga { get; set; }
         public string? Ward { get; set; }
-        public bool Status { get; set; }
+
         public DateTimeOffset OnBoardedOn { get; set; }
         public long LocationCount { get; set; }
         public long RoleCount { get; set; } 

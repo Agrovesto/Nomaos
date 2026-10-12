@@ -1,14 +1,13 @@
-﻿using Agrovesto.Backend.Core.Enums;
-using Agrovesto.Backend.Core.Models.Businesses;
-using Agrovesto.Backend.Core.Models.Common;
-using Agrovesto.Backend.Infrastructure.Entities.Common;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Core.Models.Businesses;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
@@ -52,8 +51,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }       
         public string UserId { get; set; }
-        public User User { get; set; }   // FK is already Farmer.UserId
-
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
 
@@ -70,8 +67,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public FarmerLevel Level { get; set; }
         [NotMapped]
         public List<ValueChainSelectionDto> SelectedItems { get; set; }
-
-        public FarmerStatus FarmerStatus { get; set; } = FarmerStatus.Active;
     }
 
 

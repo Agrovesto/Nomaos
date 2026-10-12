@@ -2,11 +2,9 @@
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
-using Agrovesto.Backend.Infrastructure.Logic.Services;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 
 namespace NomaOS.Test;
 
@@ -24,7 +22,7 @@ public class NotificationPreferenceTests
     }
 
     private static OnboardingRepository CreateRepository(DataContext context) =>
-        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance, Mock.Of<IClientInfoProvider>());
+        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance);
 
     private static NotificationPreferenceRequest AllEnabled() => new()
     {

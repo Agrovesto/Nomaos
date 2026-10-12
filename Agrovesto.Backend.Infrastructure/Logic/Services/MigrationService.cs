@@ -7,13 +7,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Threading;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Services
 {
-    public record NamePreview(string UserId, string FullName, string First, string? Middle, string? Last);
-    public record BackfillResult(int Candidates, int Updated, bool DryRun, List<NamePreview> Preview);
-
     public interface IMigrationService
     {
         Task RunInputFinancingCategoryTableMigrationAsync(string sourceBusinessCode, string newBusinessCode);
@@ -26,7 +22,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         Task RunOrganizationTableMigrationAsync();
         Task RunStorageCategoryTableMigrationAsync(string sourceBusinessCode, string newBusinessCode, string performedByUserId);
         Task RunTemperatureControlTypeTableMigrationAsync(string sourceBusinessCode, string newBusinessCode, string performedByUserId);
-        Task<BackfillResult?> RunUserNameBackfillAsync(bool dryRun, CancellationToken ct = default);
 
         //Task RunRepaymentPlanMigrationAsync();
         Task RunUserTableMigrationAsync();
@@ -34,7 +29,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
     public class MigrationService : IMigrationService
     {
         private readonly DataContext _context;
-        private static readonly SemaphoreSlim BackfillLock = new(1, 1);
+
         public MigrationService(DataContext context)
         {
             _context = context;
@@ -814,92 +809,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         //    _context.MigrationTrackers.Add(tracker);
         //    await _context.SaveChangesAsync();
         //}
-        public async Task<BackfillResult?> RunUserNameBackfillAsync(bool dryRun, CancellationToken ct = default)
-        {
-            if (!await BackfillLock.WaitAsync(0, ct)) return null; // already running
 
-            try
-            {
-                var candidates = new Dictionary<string, string>();
-
-                void Collect(IEnumerable<(string UserId, string? Name)> rows)
-                {
-                    foreach (var (userId, name) in rows)
-                        if (!string.IsNullOrWhiteSpace(name) && !candidates.ContainsKey(userId))
-                            candidates[userId] = name;
-                }
-
-                Collect((await _context.Farmers.AsNoTracking().Where(x => x.Name != null)
-                    .Select(x => new { x.UserId, x.Name }).ToListAsync(ct)).Select(x => (x.UserId, x.Name)));
-                Collect((await _context.Agents.AsNoTracking().Where(x => x.Name != null)
-                    .Select(x => new { x.UserId, x.Name }).ToListAsync(ct)).Select(x => (x.UserId, x.Name)));
-                Collect((await _context.MemberShips.AsNoTracking().Where(x => x.Name != null)
-                    .Select(x => new { x.UserId, x.Name }).ToListAsync(ct)).Select(x => (x.UserId, x.Name)));
-
-                const int batchSize = 500;
-                var userIds = candidates.Keys.ToList();
-                var preview = new List<NamePreview>();
-                int updated = 0;
-
-                for (int i = 0; i < userIds.Count; i += batchSize)
-                {
-                    var batchIds = userIds.Skip(i).Take(batchSize).ToList();
-
-                    var users = await _context.Users
-                        .Where(u => batchIds.Contains(u.Id) && string.IsNullOrEmpty(u.FirstName))
-                        .ToListAsync(ct);
-
-                    foreach (var user in users)
-                    {
-                        var full = candidates[user.Id];
-                        var (first, middle, last) = MigrationNameSplitter.Split(full);
-
-                        if (dryRun)
-                        {
-                            if (preview.Count < 200)
-                                preview.Add(new NamePreview(user.Id, full, first, middle, last));
-                        }
-                        else
-                        {
-                            user.FirstName = first;
-                            user.MiddleName = middle;
-                            user.LastName = last;
-                        }
-                        updated++;
-                    }
-
-                    if (!dryRun) await _context.SaveChangesAsync(ct);
-                    _context.ChangeTracker.Clear();
-                }
-
-                return new BackfillResult(candidates.Count, updated, dryRun, preview);
-            }
-            finally
-            {
-                BackfillLock.Release();
-            }
-        }
-    }
-
-
-    public static class MigrationNameSplitter
-    {
-        public static (string First, string? Middle, string? Last) Split(string? fullName)
-        {
-            if (string.IsNullOrWhiteSpace(fullName))
-                return (string.Empty, null, null);
-
-            var parts = fullName
-                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries); // splits on any whitespace
-
-            return parts.Length switch
-            {
-                1 => (parts[0], null, null),
-                2 => (parts[0], null, parts[1]),
-                _ => (parts[0],
-                      string.Join(' ', parts[1..^1]),
-                      parts[^1])
-            };
-        }
     }
 }

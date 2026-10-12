@@ -4,7 +4,6 @@ using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
-using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -42,7 +41,7 @@ public class ChangePinTests
     }
 
     private static OnboardingRepository CreateRepository(DataContext context) =>
-        new(context, CreateSignInManager(), null!, null!, null!, NullLogger<OnboardingRepository>.Instance, Mock.Of<IClientInfoProvider>());
+        new(context, CreateSignInManager(), null!, null!, null!, NullLogger<OnboardingRepository>.Instance);
 
     private static async Task<User> SeedUserAsync(DataContext context, string pin = CurrentPin)
     {

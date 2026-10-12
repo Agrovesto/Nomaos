@@ -21,6 +21,5 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<bool> RemoveUserFromRole(string userId, string roleId);
         Task<bool> ReAssignUserRole(string userId, string prevroleId, string newroleId);
         Task<AgrovestoResponse<RoleModel>> UpdateRoleAsync(string roleId, RoleModel model);
-        Task<PagedListResponse<List<RoleModel>>> GetAdminRolesAsync();
     }
 }

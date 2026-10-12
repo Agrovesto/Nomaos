@@ -44,7 +44,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         }
         public class FarmDetailsResponse
         {
-            public string FarmName { get; set; }
             public long FarmId { get; set; }
             public DateTimeOffset DateAdded { get; set; }
             public string AddedBy { get; set; }

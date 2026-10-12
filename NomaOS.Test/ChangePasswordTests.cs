@@ -3,7 +3,6 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
-using Agrovesto.Backend.Infrastructure.Logic.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -42,7 +41,7 @@ public class ChangePasswordTests
 
     private static OnboardingRepository CreateRepository(DataContext context, UserManager<User> userManager) =>
         new(context, CreateSignInManager(userManager), null!, null!, userManager,
-            NullLogger<OnboardingRepository>.Instance, Mock.Of<IClientInfoProvider>());
+            NullLogger<OnboardingRepository>.Instance);
 
     private static User BuildUser() => new()
     {
