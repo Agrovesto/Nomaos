@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 30
 
     environment:
-      name: dev
+      name: PROD
       url: https://noma-api.nomaos.com/health/ready
 
     outputs:
@@ -341,12 +341,12 @@ jobs:
 
           ssh \
             -o ConnectTimeout=10 \
-            ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            ubuntu@${{ secrets.EC2_HOST_PROD }} \
             "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
 
 
       # =========================================================
-      # RSYNC DIRECTLY TO DEV EC2
+      # RSYNC DIRECTLY TO PROD EC2
       #
       # The publish directory is copied directly from the current
       # runner to EC2.
@@ -354,7 +354,7 @@ jobs:
       # NO GitHub artifact.
       # =========================================================
 
-      - name: 📡 Sync application to Dev EC2
+      - name: 📡 Sync application to PROD EC2
         id: rsync
         run: |
 
@@ -370,7 +370,7 @@ jobs:
             --timeout=30 \
             --stats \
             "${{ env.PUBLISH_DIR }}/" \
-            "ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/" \
+            "ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/" \
             2>&1 | tee rsync.log
 
 
@@ -432,7 +432,7 @@ jobs:
             echo "===== Remote directory ====="
 
             ssh \
-              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              ubuntu@${{ secrets.EC2_HOST_PROD }} \
               "ls -la /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/"
 
             exit 1
