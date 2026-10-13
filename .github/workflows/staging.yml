@@ -213,7 +213,9 @@ jobs:
           ASPNETCORE_ENVIRONMENT='${ASPNET_ENV}' \
           AWS_REGION='${AWS_REGION}' \
           TARGET_ENV='${TARGET_ENV}' \
-            bash scripts/deploy.sh '${IMAGE}'
+            bash scripts/deploy.sh \
+              --app '${APP_NAME}' \
+              --image '${IMAGE}'
           EOF
           )
           PARAMS=$(jq -n --arg s "$SCRIPT" '{commands: [$s]}')
