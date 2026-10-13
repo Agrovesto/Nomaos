@@ -21,6 +21,7 @@
 #   input-api            blue 5013 / green 5014
 #   moneval-api          blue 5015 / green 5016
 #   serviceprovider-api  blue 5017 / green 5018
+#   agx-api              blue 5019 / green 5020
 #
 # Deployment flow:
 #   1. Validate configuration
@@ -167,6 +168,8 @@ slot_port() {
     moneval-api:green)         echo 5016 ;;
     serviceprovider-api:blue)  echo 5017 ;;
     serviceprovider-api:green) echo 5018 ;;
+    agx-api:blue)              echo 5019 ;;
+    agx-api:green)             echo 5020 ;;
     *)
       die "no blue/green port pair for app '${APP_NAME}' slot '${slot}'"
       ;;
@@ -386,6 +389,7 @@ fi
 #   input-api            blue 5013 / green 5014
 #   moneval-api          blue 5015 / green 5016
 #   serviceprovider-api  blue 5017 / green 5018
+#   agx-api              blue 5019 / green 5020
 #
 # This function deliberately calculates the port from the slot passed to it.
 # ─────────────────────────────────────────────────────────────────────────────

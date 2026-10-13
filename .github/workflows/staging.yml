@@ -1,0 +1,275 @@
+name: Staging - Deploy to EC2
+
+on:
+  push:
+    branches:
+      - staging
+
+  workflow_dispatch:
+
+
+concurrency:
+  group: "staging-deploy"
+  # Deploys are never cancelled mid-flight.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: agrovesto-dev-nomaos
+  APP_NAME: nomaos-api
+  TARGET_ENV: staging
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  ##########################################################################
+  # Resolve the image already pushed to ECR by the dev workflow
+  ##########################################################################
+  resolve-image:
+    name: Resolve ECR Image
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      tag: ${{ steps.resolve.outputs.deploy_tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
+
+      - name: Resolve image by digest
+        id: resolve
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          IMAGE="${REGISTRY}/${ECR_REPOSITORY}"
+
+          # Deploy the image published by the dev workflow.         
+          # SOURCE_TAG="${{ inputs.image_tag }}"
+          # SOURCE_TAG="${SOURCE_TAG:-dev-latest}"
+            SOURCE_TAG="dev-latest"
+
+          echo "Looking up ${IMAGE}:${SOURCE_TAG} ..."
+
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$SOURCE_TAG" \
+            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || echo "")
+
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::Image ${IMAGE}:${SOURCE_TAG} not found in ECR. Dev workflow must push it first."
+            exit 1
+          fi
+
+          # Prefer the immutable short-sha tag on this digest (not a moving alias).
+          CONCRETE_TAG=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageDigest="$DIGEST" \
+            --query 'imageDetails[0].imageTags' --output json \
+            | jq -r '.[] | select(. != "dev-latest" and . != "staging-latest" and . != "prod-latest") | .' \
+            | head -n1)
+
+          DEPLOY_TAG="${CONCRETE_TAG:-$SOURCE_TAG}"
+
+          # Re-tag digest as staging-latest (idempotent).
+          MANIFEST=$(aws ecr batch-get-image \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageDigest="$DIGEST" \
+            --query 'images[0].imageManifest' --output text)
+
+          aws ecr put-image \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-tag "staging-latest" \
+            --image-manifest "$MANIFEST" >/dev/null 2>&1 || \
+            echo "staging-latest already points to this digest."
+
+          {
+            echo "image=${IMAGE}"
+            echo "deploy_tag=${DEPLOY_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 🔎 Image Resolved from ECR"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Image | \`${IMAGE}\` |"
+            echo "| Source tag | \`${SOURCE_TAG}\` |"
+            echo "| Deploy tag | \`${DEPLOY_TAG}\` |"
+            echo "| Digest | \`${DIGEST}\` |"
+            echo "| Alias | \`staging-latest\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ##########################################################################
+  # DEPLOY via SSM (full deploy/ kit)
+  # Packs deploy/{compose,env,nginx,scripts} so deploy.sh can use:
+  #   lib.sh, migrate-data.sh, rollback.sh, status.sh,
+  #   bootstrap.sh, cutover-from-systemd.sh, Makefile, etc.
+  # Waits for the command to finish and fails the job if it fails.
+  ##########################################################################
+  deploy:
+    name: Deploy via Blue/Green
+    needs: resolve-image
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout deploy kit
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # Full deploy tree — required by the factored scripts:
+          #   deploy/compose/
+          #   deploy/env/
+          #   deploy/nginx/
+          #   deploy/scripts/bootstrap.sh
+          #   deploy/scripts/cutover-from-systemd.sh
+          #   deploy/scripts/deploy.sh          ← entrypoint
+          #   deploy/scripts/lib.sh             ← shared helpers
+          #   deploy/scripts/migrate-data.sh
+          #   deploy/scripts/rollback.sh
+          #   deploy/scripts/status.sh
+          #   deploy/Makefile
+          #   deploy/README.md
+          sparse-checkout: deploy
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve target instance
+        id: instance
+        run: |
+          IDS=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${APP_NAME}-${TARGET_ENV}" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+          COUNT=$(echo "$IDS" | wc -w)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "::error::Expected exactly 1 running instance tagged ${APP_NAME}-${TARGET_ENV}, found ${COUNT}"
+            exit 1
+          fi
+          echo "id=${IDS}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify deploy kit is present
+        run: |
+          set -euo pipefail
+          echo "Deploy kit contents:"
+          find deploy -type f | sort
+          test -f deploy/scripts/deploy.sh
+          test -f deploy/scripts/lib.sh
+          test -f deploy/scripts/migrate-data.sh
+          test -f deploy/scripts/rollback.sh
+          test -f deploy/scripts/status.sh
+          test -f deploy/scripts/bootstrap.sh
+          test -f deploy/scripts/cutover-from-systemd.sh
+
+      - name: Deploy via SSM (blue/green)
+        env:
+          IMAGE: ${{ needs.resolve-image.outputs.image }}:${{ needs.resolve-image.outputs.tag }}
+          INSTANCE_ID: ${{ steps.instance.outputs.id }}
+        run: |
+          if [ "$TARGET_ENV" = "prod" ]; then ASPNET_ENV=Production; else ASPNET_ENV=Staging; fi
+
+          # Ship the entire deploy/ tree from git so the host never drifts.
+          # deploy.sh (entrypoint) factors in lib.sh + migrate/rollback/status/etc.
+          # The wrapper is POSIX sh (SSM may run it under dash); scripts run under bash.
+          TAR_B64=$(tar -C deploy -czf - . | base64 -w0)
+
+          SCRIPT=$(cat <<EOF
+          set -eu
+          umask 077
+          DEPLOY_DIR=\$(mktemp -d /tmp/nomaos-deploy.XXXXXX)
+          trap 'rm -rf "\$DEPLOY_DIR"' EXIT
+          echo '${TAR_B64}' | base64 -d | tar -C "\$DEPLOY_DIR" -xzf -
+          cd "\$DEPLOY_DIR"
+
+          # Ensure scripts are executable after unpack
+          chmod +x scripts/*.sh 2>/dev/null || true
+
+          # Entry point — deploy.sh sources lib.sh and may call
+          # migrate-data / status / rollback as part of the process.
+          APP_NAME='${APP_NAME}' \
+          ASPNETCORE_ENVIRONMENT='${ASPNET_ENV}' \
+          AWS_REGION='${AWS_REGION}' \
+          TARGET_ENV='${TARGET_ENV}' \
+            bash scripts/deploy.sh '${IMAGE}'
+          EOF
+          )
+          PARAMS=$(jq -n --arg s "$SCRIPT" '{commands: [$s]}')
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${IMAGE##*:}" \
+            --timeout-seconds 600 \
+            --parameters "$PARAMS" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $CMD_ID"
+
+          STATUS=Pending
+          for _ in $(seq 1 120); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Pending|InProgress|Delayed) sleep 5 ;; *) break ;; esac
+          done
+
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text || true
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Deployment ${STATUS} on ${INSTANCE_ID}"
+            exit 1
+          fi
+
+      # Optional external check. Set HEALTH_URL as an environment variable
+      # (per environment) to enable it.
+      - name: External health check
+        if: vars.HEALTH_URL != ''
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null; then
+              echo "Healthy: ${{ needs.resolve-image.outputs.tag }}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Health check failed: $HEALTH_URL"
+          exit 1
+
+      - name: Deploy summary
+        if: always()
+        run: |
+          {
+            echo "## 🚀 Staging Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Environment | \`${TARGET_ENV}\` |"
+            echo "| Instance | \`${{ steps.instance.outputs.id }}\` |"
+            echo "| Image | \`${{ needs.resolve-image.outputs.image }}:${{ needs.resolve-image.outputs.tag }}\` |"
+            echo "| Entrypoint | \`deploy/scripts/deploy.sh\` |"
+            echo "| Kit | compose, env, nginx, lib, migrate-data, rollback, status, bootstrap, cutover |"
+          } >> "$GITHUB_STEP_SUMMARY"
