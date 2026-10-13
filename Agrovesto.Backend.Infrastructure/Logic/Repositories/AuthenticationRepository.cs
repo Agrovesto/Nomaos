@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -107,8 +107,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     }
                 }
 
-                // 🔹 Retrieve user roles
-                userRoles = await _userManager.GetRolesAsync(user);
+                // Role assignments are tenant-scoped: only issue claims for the business being used to log in.
+                userRoles = await _context.UserRoles
+                    .Where(assignment => assignment.UserId == user.Id &&
+                                         assignment.BusinessId == business.BusinessId &&
+                                         assignment.IsActive)
+                    .Select(assignment => assignment.Role.Name!)
+                    .Distinct()
+                    .ToListAsync();
                 if (userRoles == null) throw new Exception("Could not sign in user, kindly contact Administrator");
 
                 // 🔹 Update last login

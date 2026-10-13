@@ -1,4 +1,4 @@
-﻿
+
 using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
@@ -479,67 +479,78 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             };
         }
-        public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterOrganizationUserAsync(OnboardingRequestModel model, OnBoardingArgs args, string role)
+        public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterOrganizationUserAsync(
+            OnboardingRequestModel model, OnBoardingArgs args, string role)
         {
-          
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                return (model, false, "Business context is required.");
 
-            var existingUser = await _onboardingRepository.FindExistingUserAsync(model);
-            if (existingUser != null && existingUser.User !=null)
+            var business = await _context.Businesses
+                .FirstOrDefaultAsync(x => x.BusinessCode == args.businessCode);
+            if (business is null)
+                return (model, false, "Business not found.");
+
+            var normalizedRoleName = role.Trim().ToUpperInvariant();
+            var roleEntity = await _context.Roles
+                .FirstOrDefaultAsync(x => x.NormalizedName == normalizedRoleName);
+            if (roleEntity is null)
+                return (model, false, "Specified role does not exist.");
+            if (roleEntity.BusinessId is not null && roleEntity.BusinessId != business.BusinessId)
+                return (model, false, "Role is not available for this business.");
+
+            var lookup = await _onboardingRepository.FindExistingUserAsync(model);
+            var user = lookup?.User;
+            if (user is null)
             {
-                bool hasRole = await _userManager.IsInRoleAsync(existingUser.User, role);
-                   
+                var salt = EncryptionUtil.GetSalt();
+                user = BuildUserEntity(model, args, salt);
 
-                if (!hasRole)
+                var created = string.IsNullOrEmpty(model.Password)
+                    ? await _userManager.CreateAsync(user)
+                    : await _userManager.CreateAsync(user, model.Password);
+                if (!created.Succeeded)
+                    return (model, false, string.Join(", ", created.Errors.Select(e => e.Description)));
+            }
+
+            // Role membership is tenant-scoped in the merged identity model; do not use
+            // UserManager's unscoped role check for this business-specific assignment.
+            var assignment = await _context.UserRoles.FirstOrDefaultAsync(x =>
+                x.UserId == user.Id && x.RoleId == roleEntity.Id && x.BusinessId == business.BusinessId);
+            if (assignment is null)
+            {
+                _context.UserRoles.Add(new ApplicationUserRole
                 {
-                    var result = await _userManager.AddToRoleAsync(existingUser.User, role);
-
-                    if (!result.Succeeded)
-                    {
-                        var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-
-                    }
-                }
-
+                    UserId = user.Id,
+                    RoleId = roleEntity.Id,
+                    BusinessId = business.BusinessId,
+                    IsActive = true
+                });
             }
             else
             {
-                var salt = EncryptionUtil.GetSalt();
-
-                var user = BuildUserEntity(model, args, salt);
-
-                IdentityResult createUser = string.IsNullOrEmpty(model.Password)
-                    ? await _userManager.CreateAsync(user)
-                    : await _userManager.CreateAsync(user, model.Password);
-
-                if (!createUser.Succeeded)
-                {
-                    var errors = string.Join(", ", createUser.Errors.Select(e => e.Description));
-
-                }
-
-                await _userManager.AddToRoleAsync(user, role);
-
-                existingUser.User = user;
+                assignment.IsActive = true;
             }
 
-            bool exists = await _context.UserOrganizations
-               .AnyAsync(x => x.UserId == existingUser.User.Id && x.OrganizationCode == args.organizationCode);
-
-            if (!exists)
+            if (!string.IsNullOrWhiteSpace(args.organizationCode) &&
+                !await _context.UserOrganizations.AnyAsync(x =>
+                    x.UserId == user.Id && x.OrganizationCode == args.organizationCode))
             {
                 _context.UserOrganizations.Add(new UserOrganization
                 {
-                    UserId = existingUser.User.Id,
+                    UserId = user.Id,
                     OrganizationCode = args.organizationCode
                 });
             }
+
+            await _context.SaveChangesAsync();
+
             return (
-              new OnboardingRequestModel
-              {
-                  Email = existingUser.User.Email,
-                  PhoneNumber = existingUser.User.PhoneNumber,
-                  Id = existingUser.User.Id
-              },
+                new OnboardingRequestModel
+                {
+                    Email = user.Email,
+                    PhoneNumber = user.PhoneNumber,
+                    Id = user.Id
+                },
                 true,
                 "Registration Successful.");
         }
