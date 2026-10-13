@@ -4,12 +4,9 @@ on:
   push:
     branches:
       - staging
+
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "ECR image tag to deploy (short SHA or dev-latest)."
-        required: false
-        default: "dev-latest"
+
 
 concurrency:
   group: "staging-deploy"
@@ -61,8 +58,11 @@ jobs:
         run: |
           REGISTRY="${{ steps.login-ecr.outputs.registry }}"
           IMAGE="${REGISTRY}/${ECR_REPOSITORY}"
-          SOURCE_TAG="${{ inputs.image_tag }}"
-          SOURCE_TAG="${SOURCE_TAG:-dev-latest}"
+
+          # Deploy the image published by the dev workflow.         
+          # SOURCE_TAG="${{ inputs.image_tag }}"
+          # SOURCE_TAG="${SOURCE_TAG:-dev-latest}"
+            SOURCE_TAG="dev-latest"
 
           echo "Looking up ${IMAGE}:${SOURCE_TAG} ..."
 

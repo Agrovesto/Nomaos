@@ -121,7 +121,11 @@ RUN mkdir -p /app/logs \
 #   green -> 127.0.0.1:5008:5008
 #
 ########################################
-
+HEALTHCHECK --interval=30s \
+  --timeout=5s \
+  --start-period=40s \
+  --retries=3 \
+  CMD curl --fail --silent http://127.0.0.1:5008/health/ready || exit 1
 ########################################
 # NON-ROOT
 ########################################
