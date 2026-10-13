@@ -50,9 +50,9 @@ namespace Agrovesto.Backend.API.Migrations
 
             migrationBuilder.AlterColumn<long>(
            name: "BusinessId", table: "AspNetUserRoles",
-           type: "bigint", 
-           nullable: true, 
-           oldClrType: typeof(long), 
+           type: "bigint",
+           nullable: true,
+           oldClrType: typeof(long),
            oldType: "bigint", oldNullable: true);
 
             migrationBuilder.Sql(@"

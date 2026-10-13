@@ -1,4 +1,4 @@
-using Agrovesto.Backend.Core.CoreUtils;
+﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
@@ -20,14 +20,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/admin")]
-    //[Authorize(Policy = "AdminPanel")]
+    [Authorize]
     [ApiController]
     public class AdminController : BaseController
     {
@@ -35,7 +34,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IAdminDashboardManager _adminDashboardManager;
         private readonly IAdminFarmerManager _farmerManager;
         public readonly IAdminUserManagementManager _adminUserManagementManager;
-        public static string AdminUserType { get; private set; } = UserType.Agrovesto.ToString();
         private const int MaxCustomRangeDays = 366 * 5;
 
         public AdminController(IHttpContextAccessor httpContextAccessor,
@@ -52,57 +50,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _adminUserManagementManager = adminUserManagementManager;
         }
 
-        /// <summary>
-        /// Seed a system/super admin user. This is intended for initial seeding and should be protected in production.
-        /// </summary>
-        [HttpPost("auth/seed-super-admin")]
-        [AllowAnonymous]
-        public async Task<IActionResult> SeedSuperAdmin([FromQuery]string businessCode)
-        {
-            try
-            {
-                // If caller did not supply a model use a default seed (matches existing DB initializer defaults)
-                var seed = new UserModel
-                {
-                    Email = "reloarhub@maildrop.cc",
-                    Password = "Reloarhub144828@",
-                    PhoneNumber = "01126201565",
-                    UserType = AdminUserType,
-                    FirstName = "Reloarhub Solutions",
-                    BusinessCode=businessCode
-                };
-
-                var result = await _onBoardingManager.RegisterAdmin(seed, "SystemAdmin");
-
-                return result.status
-                    ? Ok(new Response<(UserModel model, bool status, string message)>
-                    {
-                        Code = ResponseCodes.Success,
-                        Succeeded = true,
-                        Message = result.message,
-                        Data = result
-                    })
-                    : BadRequest(new Response<string> { Succeeded = false, Message = result.message, Code = ResponseCodes.Failed });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode((int)ex.HttpStatusCode, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-        }
-               
-        
         [HttpPost("auth/login")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
@@ -143,10 +90,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// period: today | week | month | quarter | year | custom
         /// </summary>
         [HttpGet("dashboard")]
+        [HasPermission(Permissions.Dashboard.View)]
         [ProducesResponseType(typeof(DashboardDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Get([FromQuery] DashboardQuery query,
-            
+
             CancellationToken ct)
         {
             if (query.Period == DashboardPeriod.Custom)
@@ -162,7 +110,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
             var result = await _adminDashboardManager.GetAsync(query.Period, query.From, query.To, query.Chart, ct);
-     
+
             return Ok(new Response<DashboardDto>()
             {
                 Code = AdminResponseCodes.Success,
@@ -229,7 +177,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 Succeeded = true,
                 Message = ResponseMessages.Successful,
                 Data = result
-            }); 
+            });
         }
 
         // POST api/admin/users/invite
@@ -381,6 +329,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         [HttpGet("farmer/summary")]
+        [HasPermission(Permissions.Farmers.View)]
         public async Task<IActionResult> Summary()
         {
             var businessId = RequireBusinessId();
@@ -390,6 +339,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("farmer/list")]
+        [HasPermission(Permissions.Farmers.View)]
         public async Task<IActionResult> List([FromQuery] FarmerListQuery query)
         {
             query.BusinessId = RequireBusinessId();
@@ -398,6 +348,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("farmer/export")]
+        [HasPermission(Permissions.Farmers.View)]
         public async Task<IActionResult> Export([FromQuery] FarmerListQuery query, [FromQuery] string format = "csv")
         {
             query.BusinessId = RequireBusinessId();
@@ -412,6 +363,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("farmer/{userId}")]
+        [HasPermission(Permissions.Farmers.View)]
         public async Task<IActionResult> Details(string userId)
         {
             var businessId = RequireBusinessId();
@@ -423,6 +375,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("farmer/{userId}/suspend")]
+        [HasPermission(Permissions.Farmers.Manage)]
         public async Task<IActionResult> Suspend(string userId, [FromBody] SuspendFarmerRequest request)
         {
             request.BusinessId = RequireBusinessId();
@@ -433,8 +386,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer suspended." })
                 : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already suspended." });
         }
-       
+
         [HttpGet("farmer/{userId}/farms/summary")]
+        [HasPermission(Permissions.Farmers.View)]
         public async Task<IActionResult> FarmSummary(string userId)
         {
             var businessId = RequireBusinessId();
@@ -446,6 +400,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("farmer/{userId}/farms")]
+        [HasPermission(Permissions.Farmers.View)]
         public async Task<IActionResult> Farms(string userId,
             [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
@@ -457,6 +412,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return Ok(new Response<PagedResult<FarmListItemDto>> { Succeeded = true, Data = data });
         }
         [HttpGet("farmer/{userId}/organization-membership")]
+        [HasPermission(Permissions.Farmers.View)]
         public async Task<IActionResult> OrganizationMembership(string userId)
         {
             var businessId = RequireBusinessId();
@@ -468,6 +424,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("farmer/create")]
+        [HasPermission(Permissions.Farmers.Manage)]
         public async Task<IActionResult> CreateFarmerAsync([FromBody] AdminCreateFarmerRequest model, [FromQuery] AdminOnBoardingArgs args,
             CancellationToken ct)
         {
@@ -476,9 +433,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
                 var result = await _farmerManager.CreateFarmerAsync(model, args, ct);
-                return Ok(new Response<(bool, string, string[])> 
-                { 
-                    Succeeded = true, 
+                return Ok(new Response<(bool, string, string[])>
+                {
+                    Succeeded = true,
                     Data = result,
                     Message=result.msg,
                     Code= result.status ? AdminResponseCodes.Success : AdminResponseCodes.Failed

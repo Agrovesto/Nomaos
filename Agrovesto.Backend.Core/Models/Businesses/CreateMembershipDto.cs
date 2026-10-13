@@ -19,7 +19,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long MemberShipTypeId { get; set; }
 
         public string? Location { get; set; }
-        public string? RegistrationNumber { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
         public string? Ward { get; set; }

@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
@@ -206,8 +206,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("resend-otp")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
-        //Todo:rework to remove usertype
-        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] VerificationArgs args)
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -263,15 +262,27 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
             result => Ok(Success(result, ResponseMessages.Successful)));
         }
-        [AllowAnonymous]
+
         [HttpPost("refresh")]
+        [AllowAnonymous]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
         {
+            if (request is null || string.IsNullOrWhiteSpace(request.RefreshToken))
+                return BadRequest(new { message = "Refresh token is required." });
+
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             var result = await _onBoardingManager.RefreshToken(request.RefreshToken, ip);
-
-            return result.Status ? Ok(result.Response) : Unauthorized(new { message = result.Message });
+            return result.Status
+                ? Ok(new Response<TokenModel>
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = result.Message,
+                    Data = result.Response
+                })
+                : Unauthorized(new { message = result.Message });
         }
+
         [HttpPost("login")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
@@ -279,10 +290,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
             return await ExecuteAsync(
-                () => _onBoardingManager.Login(model, businessCode, ip),
+                () => _onBoardingManager.Login(model, businessCode),
                 createUser =>
                 {
                     var response = new Response<TokenModel>
@@ -434,24 +444,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             };
 
             var (status, message) = await _onBoardingManager.ForgotCredential(model);
-            return Ok(new { status, message });
-        }
-        [HttpPost("resend-credential")]
-        [AllowPendingCredentialChange]
-        public async Task<IActionResult> ResendCredential([FromBody] ForgotCredentialRequest request,
-            [FromQuery] string businessCode,
-            [FromQuery] string env)
-        {
-            var model = new ForgotCredentialModel
-            {
-                Type = request.Type,
-                Email = request.Email,
-                PhoneNumber = request.PhoneNumber,
-                BusinessCode = businessCode,
-                Env = env
-            };
-
-            var (status, message) = await _onBoardingManager.ResendCredentialAsync(model);
             return Ok(new { status, message });
         }
         [HttpPost("reset-credential")]

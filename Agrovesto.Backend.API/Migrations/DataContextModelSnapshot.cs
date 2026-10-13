@@ -3589,9 +3589,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("RegistrationNumber")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("State")
                         .HasColumnType("nvarchar(max)");
 
@@ -3842,16 +3839,11 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("UserId")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long?>("WardId")
-                        .HasColumnType("bigint");
-
                     b.HasKey("OrganizationId");
 
                     b.HasIndex("LgaId");
 
                     b.HasIndex("StateId");
-
-                    b.HasIndex("WardId");
 
                     b.ToTable("Organizations", (string)null);
                 });
@@ -8045,15 +8037,10 @@ namespace Agrovesto.Backend.API.Migrations
                         .WithMany()
                         .HasForeignKey("StateId");
 
-                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Ward", "Ward")
-                        .WithMany()
-                        .HasForeignKey("WardId");
-
                     b.Navigation("LGA");
 
                     b.Navigation("State");
 
-                    b.Navigation("Ward");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>

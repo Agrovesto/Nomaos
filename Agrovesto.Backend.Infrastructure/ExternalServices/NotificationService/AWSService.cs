@@ -28,9 +28,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         Task SendReconciliationAlertAsync(ReconciliationAlertRequest model);
         Task SendSignupSms(string phoneNumber, string userName);
         Task SendTemplatedEmailAsync(string senderEmail, string recipientEmail, string templateName, object templateData);
-
-        Task SendSMSAsync(string phoneE164, string message, CancellationToken ct = default);
-
     }
     public class AWSService : IAWSService
     {
@@ -55,22 +52,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             _settings = settings.Value;
             _logger = logger;
         }
-
-        public async Task SendSMSAsync(string phoneE164, string message, CancellationToken ct = default)
-        {
-            var request = new PublishRequest
-            {
-                PhoneNumber = phoneE164, // must be E.164, e.g. +234...
-                Message = message,
-                MessageAttributes = new Dictionary<string, MessageAttributeValue>
-                {
-                    ["AWS.SNS.SMS.SMSType"] = new() { DataType = "String", StringValue = "Transactional" },
-                    ["AWS.SNS.SMS.SenderID"] = new() { DataType = "String", StringValue = "YourBrand" }
-                }
-            };
-            await _sns.PublishAsync(request, ct);
-        }
-
         public async Task CreateTemplateAsync()
         {
             var templateName = "AgrovestoWelcomeTemplate";

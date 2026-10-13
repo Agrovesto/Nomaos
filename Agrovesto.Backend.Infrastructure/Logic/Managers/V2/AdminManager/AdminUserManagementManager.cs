@@ -53,8 +53,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         private readonly IAdminAuditLogger _audit;
         public AdminUserManagementManager(IConfiguration configuration,
             IPermissionCacheInvalidator cache,
-            DataContext db, UserManager<User> users, 
-            IAWSService email, IOptions<AdminPanelOptions> opts, 
+            DataContext db, UserManager<User> users,
+            IAWSService email, IOptions<AdminPanelOptions> opts,
             ILogger<AdminUserManagementManager> log, IAdminAuditLogger audit)
         {
             _configuration = configuration;
@@ -86,7 +86,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             //var pending = await _db.AdminInvitations.AsNoTracking()
             //    .CountAsync(i => i.AcceptedAt == null && i.RevokedAt == null && i.ExpiresAt > now, ct);
 
-            return new(counts?.Total ?? 0, counts?.Active ?? 0, 
+            return new(counts?.Total ?? 0, counts?.Active ?? 0,
                 counts?.Suspended ?? 0, counts?.Pending ?? 0);
         }
 
@@ -356,8 +356,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             if (failure is not null) return failure;
             await _audit.LogAsync(
-                "UserInvited", 
-                invitedByUserId, 
+                "UserInvited",
+                invitedByUserId,
                 user!.Id,
                 $"Invited user to login as Role: {role.Name}",
                 AdminActiviLogModule.AdminPanel.UserMgt,
@@ -408,7 +408,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 await _email.SendEmailAsync(
                     senderEmail!,
                     user.Email!,
-                    "You've been invited to the NomaOS Admin Panel", 
+                    "You've been invited to the NomaOS Admin Panel",
                     body,
                     body);
                 return true;
@@ -491,7 +491,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 return AccessResult.Fail<AdminUserStatusDto>(404, "User not found.");
 
 
-            if (user.Id == actingUserId) // change actinguserid to activeuser admincode 
+            if (user.Id == actingUserId) // change actinguserid to activeuser admincode
                 return AccessResult.Fail<AdminUserStatusDto>(400, "You cannot deactivate your own account.");
 
             if (user.Status == AdminUserStatus.Deactivated)
@@ -609,7 +609,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 u.Id, u.AdminCode ?? "",
                 JoinName(u.FirstName, u.MiddleName, u.LastName), u.FirstName ?? "", u.MiddleName, u.LastName ?? "",
                 status.ToString(), u.Department, roles,
-                u.Email ?? "", u.PhoneNumber, 
+                u.Email ?? "", u.PhoneNumber,
                 //FormatPhoneDisplay(u.PhoneNumber),
                 u.CreatedOn, NameOf(u.CreatedBy) ?? "System", u.DateModified, u.LastLoginDate,
                 invite is null ? "Direct" : "Invitation",
@@ -750,7 +750,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         }
 
         public async Task<AccessResult<AdminUserDetailDto>> UpdateUserAsync(
-    string adminId, 
+    string adminId,
     UpdateAdminUserRequest req, string actingUserId, CancellationToken ct)
         {
             var phone = NormalizePhone(req.PhoneNumber);
@@ -881,5 +881,3 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
 
 }
-
-

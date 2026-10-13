@@ -80,5 +80,3 @@ namespace Agrovesto.Backend.Core.Models.Admin
         List<TopAgentDto> TopAgents,
         RegistrationDto Registrations);
 }
-
-

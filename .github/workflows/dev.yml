@@ -1,381 +1,444 @@
-name: CI - Dev Build and Test
+name: Dev - Scan, Test, Build & Push
 
 on:
+  pull_request:
+    branches: [dev]
   push:
     branches: [dev]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: "dev-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# ============================================================
-# GITHUB TOKEN PERMISSIONS
-# ============================================================
 permissions:
   contents: read
   checks: write
+  pull-requests: read
 
 env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: agrovesto-dev-nomaos
+  APP_NAME: nomaos-api
   DOTNET_VERSION: 8.0.x
   DOTNET_SDK_VERSION: 8.0.423
   SOLUTION_PATH: Agrovesto.Backend.sln
-  PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
-  SONAR_PROJECT_KEY: Agrovesto.Backend.API
-  PUBLISH_DIR: ${{ github.workspace }}/publish
-  COMMIT_SHA: ${{ github.sha }}
+  TEST_PROJECT: NomaOS.Test/NomaOS.Test.csproj
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-  DOTNET_DETERMINISTIC: true
 
 defaults:
   run:
     shell: bash
 
-
-# ==============================================================
-# JOB 1 — DEV CI (BUILD + TEST ONLY)
-# ==============================================================
-
 jobs:
 
-  dev-ci:
-    name: 🔍 Dev Build and Test
+  # =========================================================================
+  # PR: Secret scanning + filesystem vulnerability/misconfig scan
+  # =========================================================================
+  secret-and-fs-scan:
+    name: 🔒 Secret & Filesystem Scan
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    outputs:
-      test-outcome: ${{ steps.test.outcome }}
-      build-outcome: ${{ steps.build.outcome }}
-      coverage-pct: ${{ steps.coverage-summary.outputs.line_coverage }}
-
     steps:
-      # =========================================================
-      # CHECKOUT
-      # =========================================================
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
-      # =========================================================
-      # PIN .NET SDK
-      # =========================================================
-      - name: 📌 Pin .NET SDK version
-        run: |
-          cat > global.json << EOF
-          {
-            "sdk": {
-              "version": "${{ env.DOTNET_SDK_VERSION }}",
-              "rollForward": "latestPatch"
-            }
-          }
-          EOF
-          echo "===== global.json ====="
-          cat global.json
-      # =========================================================
-      # SETUP .NET
-      # =========================================================
-      - name: ⚙️ Setup .NET
-        uses: actions/setup-dotnet@v4
+
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341 # v3.99.0
+        with:
+          extra_args: --only-verified
+        continue-on-error: true
+
+      - name: Trivy repo scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: "1"
+          severity: "HIGH,CRITICAL"
+        continue-on-error: true
+
+  # =========================================================================
+  # PR: IaC scan (Checkov)
+  # =========================================================================
+  iac-scan:
+    name: 🧱 Checkov IaC Scan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,github_actions,terraform,kubernetes
+          soft_fail: false
+          quiet: true
+          output_format: cli
+
+  # =========================================================================
+  # PR: Dependency vulnerability check
+  # =========================================================================
+  dependency-check:
+    name: 📦 Dependency Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-      # =========================================================
-      # VERIFY SDK
-      # =========================================================
-      - name: 🔍 Verify SDK version
+
+      - name: Restore
+        run: dotnet restore "${{ env.SOLUTION_PATH }}"
+
+
+      - name: Audit NuGet vulnerabilities and show upgrade candidates
+        shell: bash
         run: |
-          SDK=$(dotnet --version)
-          echo "Active SDK: $SDK"
-          if [[ "$SDK" != 8.* ]]; then
-            echo "❌ Expected .NET 8 SDK"
+            set +e
+
+            # 1. Find vulnerable direct and transitive packages.
+            VULN_OUTPUT=$(dotnet list "$SOLUTION_PATH" package \
+            --vulnerable --include-transitive 2>&1)
+            VULN_EXIT=$?
+
+            echo "========== VULNERABLE NUGET PACKAGES =========="
+            printf '%s\n' "$VULN_OUTPUT"
+
+            # Stop if the vulnerability scan itself failed.
+            if [ "$VULN_EXIT" -ne 0 ]; then
+            echo "::error::NuGet vulnerability scan command failed."
+            exit "$VULN_EXIT"
+            fi
+
+            # 2. Find available upgrades separately.
+            UPDATE_OUTPUT=$(dotnet list "$SOLUTION_PATH" package \
+            --outdated --include-transitive 2>&1)
+            UPDATE_EXIT=$?
+
+            echo ""
+            echo "========== AVAILABLE UPGRADE CANDIDATES =========="
+            printf '%s\n' "$UPDATE_OUTPUT"
+
+            if [ "$UPDATE_EXIT" -ne 0 ]; then
+            echo "::warning::Could not retrieve package upgrade candidates."
+            fi
+
+            # 3. Publish both reports in the GitHub Actions Summary.
+            {
+            echo "## NuGet Security Audit"
+            echo ""
+            echo "### Vulnerable Packages"
+            echo '```text'
+            printf '%s\n' "$VULN_OUTPUT"
+            echo '```'
+            echo ""
+            echo "### Available Upgrade Candidates"
+            echo "These are available updates, not guaranteed security fixes."
+            echo '```text'
+            printf '%s\n' "$UPDATE_OUTPUT"
+            echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            # 4. Keep the security gate enforced.
+            if printf '%s\n' "$VULN_OUTPUT" |
+            grep -qiE '(^|[[:space:]])(High|Critical)([[:space:]]|$)'; then
+            echo "::error::High/Critical vulnerable NuGet packages detected. Review the upgrade candidates and advisory URLs above."
             exit 1
-          fi
-      # =========================================================
-      # SonarQube scanning is temporarily disabled. The related steps are
-      # commented out below; build, tests, and coverage remain enabled.
-      # JAVA FOR SONARQUBE
-      # ========================================================
-      # - name: ☕ Setup Java 17
-        # uses: actions/setup-java@v4
-        # with:
-          # distribution: zulu
-          # java-version: '17'
-      # =========================================================
-      # CACHE NUGET
-      # =========================================================
-      - name: 💾 Cache NuGet packages
-        uses: actions/cache@v4
+            fi
+
+            echo "No High/Critical NuGet findings detected."
+        continue-on-error: true
+
+
+  # =========================================================================
+  # PR: Tests + Coverage + SonarQube SAST
+  # =========================================================================
+#   sonarqube-sast:
+#     name: 🧪 Tests + SonarQube SAST
+#     if: github.event_name == 'pull_request'
+#     runs-on: ubuntu-latest
+#     environment: secops
+#     timeout-minutes: 30
+#     env:
+#       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+#       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#       SONAR_PROJECT: ${{ secrets.SONAR_PROJECT }}
+#     steps:
+#       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+#         with:
+#           fetch-depth: 0
+
+#       - name: Pin .NET SDK
+#         run: |
+#           cat > global.json << EOF
+#           {
+#             "sdk": {
+#               "version": "${{ env.DOTNET_SDK_VERSION }}",
+#               "rollForward": "latestPatch"
+#             }
+#           }
+#           EOF
+
+#       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+#         with:
+#           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+#       - uses: actions/setup-java@v4
+#         with:
+#           distribution: zulu
+#           java-version: '17'
+
+#       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+#         with:
+#           path: ~/.nuget/packages
+#           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+#           restore-keys: nuget-${{ runner.os }}-
+
+#       - name: Install SonarScanner
+#         run: |
+#           dotnet tool install --global dotnet-sonarscanner
+#           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+#       - name: Restore
+#         run: dotnet restore "${{ env.SOLUTION_PATH }}"
+
+#       - name: SonarQube begin
+#         run: |
+#           VERSION=$(dotnet msbuild Agrovesto.Backend.API/Agrovesto.Backend.API.csproj -getProperty:Version 2>/dev/null || echo "0.0.0")
+#           dotnet sonarscanner begin \
+#             /k:"${SONAR_PROJECT}" \
+#             /d:sonar.host.url="${SONAR_HOST_URL}" \
+#             /d:sonar.token="${SONAR_TOKEN}" \
+#             /d:sonar.projectVersion="${VERSION:-0.0.0}" \
+#             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/coverage/**/coverage.opencover.xml" \
+#             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/coverage/**/*.trx" \
+#             /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.md,**/wwwroot/**" \
+#             /d:sonar.coverage.exclusions="**/*Tests/**,**/Program.cs,**/Startup.cs"
+
+#       - name: Build
+#         run: dotnet build "${{ env.SOLUTION_PATH }}" -c Release --no-restore
+
+#       - name: Test with coverage
+#         run: |
+#           dotnet test "${{ env.TEST_PROJECT }}" -c Release --no-build \
+#             --logger "trx;LogFileName=test-results.trx" \
+#             --collect:"XPlat Code Coverage" \
+#             --results-directory ./coverage \
+#             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+#       - name: SonarQube end
+#         run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
+
+#       - name: Quality gate
+#         uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
+#         timeout-minutes: 5
+#         with:
+#           scanMetadataReportFile: .sonarqube/out/.sonar/report-task.txt
+
+#       - name: Publish test results
+#         uses: dorny/test-reporter@v1
+#         if: always()
+#         with:
+#           name: Dev Test Results
+#           path: 'coverage/**/*.trx'
+#           reporter: dotnet-trx
+#           fail-on-empty: true
+#           fail-on-error: true
+
+  # =========================================================================
+  # PR: Build image + Trivy image scan (NO PUSH)
+  # =========================================================================
+  validate-image:
+    name: 🐳 Build & Scan Image (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Build image (load only)
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
-          path: ~/.nuget/packages
-          key: >
-            nuget-${{ runner.os }}-
-            dotnet-${{ env.DOTNET_SDK_VERSION }}-
-            ${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-dotnet-${{ env.DOTNET_SDK_VERSION }}-
-            nuget-${{ runner.os }}-
-      # =========================================================
-      # CACHE SONAR
-      # =========================================================
-      # - name: 💾 Cache SonarQube
-        # uses: actions/cache@v4
-        # with:
-          # path: ~/.sonar/cache
-          # key: sonar-${{ runner.os }}-7.1.0
-          # restore-keys: |
-            # sonar-${{ runner.os }}-
-      # =========================================================
-      # CACHE .NET TOOLS
-      # =========================================================
-      # - name: 💾 Cache .NET tools
-        # uses: actions/cache@v4
-        # with:
-          # path: ~/.dotnet/tools
-          # key: >
-            # dotnet-tools-${{ runner.os }}-
-            # ${{ hashFiles('**/.config/dotnet-tools.json') }}
-          # restore-keys: |
-            # dotnet-tools-${{ runner.os }}-
-      # =========================================================
-      # RESTORE
-      # =========================================================
-      - name: 📦 Restore dependencies
-        run: |
-          dotnet restore \
-            "${{ env.SOLUTION_PATH }}" \
-            --verbosity quiet \
-            /p:ContinuousIntegrationBuild=true
-      # =========================================================
-      # INSTALL SONARSCANNER
-      # =========================================================
-      # - name: 🛠️ Install SonarScanner
-        # run: |
-          # if dotnet tool list --global | grep -q "dotnet-sonarscanner"; then
-            # echo "✅ SonarScanner already available"
-          # else
-            # dotnet tool install \
-              # --global \
-              # dotnet-sonarscanner \
-              # --version 7.1.0
-          # fi
-          # echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.APP_NAME }}:pr-scan
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+          provenance: false
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
 
-      # =========================================================
-      # SONAR BEGIN
-      # =========================================================
-      # - name: 🔍 SonarQube — Begin
-        # env:
-          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          # SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # run: |
-          # dotnet sonarscanner begin \
-            # /k:"${{ env.SONAR_PROJECT_KEY }}" \
-            # /d:sonar.host.url="${SONAR_HOST_URL}" \
-            # /d:sonar.token="${SONAR_TOKEN}" \
-            # /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
-            # /d:sonar.cs.vstest.reportsPaths="TestResults/**/*.trx" \
-            # /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
-            # /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
-            # /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
-        # continue-on-error: true
-      # =========================================================
-      # BUILD
-      # =========================================================
-      - name: 🏗️ Build
-        id: build
-        run: |
-          START=$(date +%s)
-          dotnet build \
-            "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-restore \
-            --verbosity quiet \
-            -maxcpucount \
-            2>&1 | tee build.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          END=$(date +%s)
-          {
-            echo "### 🏗️ Build"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| Status | $([ "$EXIT_CODE" -eq 0 ] && echo '✅ Success' || echo '❌ Failed') |"
-            echo "| Duration | $((END - START))s |"
-            echo "| Warnings | ⚠️ $(grep -c ': warning ' build.log || true) |"
-            echo "| Errors | ❌ $(grep -c ': error ' build.log || true) |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit "$EXIT_CODE"
+      - name: Trivy image scan (gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.APP_NAME }}:pr-scan
+          scanners: vuln
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+        continue-on-error: true
 
-      # =========================================================
-      # TEST + COVERAGE
-      # =========================================================
-      - name: 🧪 Run tests with coverage
-        id: test
-        run: |
-          START=$(date +%s)
-          dotnet test \
-            "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-build \
-            --verbosity minimal \
-            --logger "trx;LogFileName=test-results.trx" \
-            --collect "XPlat Code Coverage" \
-            --settings coverlet.runsettings \
-            --results-directory ./TestResults \
-            -p:MaxCpuCount=2 \
-            2>&1 | tee test.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          END=$(date +%s)
-          ELAPSED=$((END - START))
-          set +o pipefail
-          PASSED=$(
-            grep -oP 'Passed:\s*\K[0-9]+' test.log |
-            tail -1
-          )
-          FAILED=$(
-            grep -oP 'Failed:\s*\K[0-9]+' test.log |
-            tail -1
-          )
-          SKIPPED=$(
-            grep -oP 'Skipped:\s*\K[0-9]+' test.log |
-            tail -1
-          )
-          TOTAL=$(
-            grep -oP 'Total:\s*\K[0-9]+' test.log |
-            tail -1
-          )
-          PASSED="${PASSED:-0}"
-          FAILED="${FAILED:-0}"
-          SKIPPED="${SKIPPED:-0}"
-          TOTAL="${TOTAL:-0}"
-          set -o pipefail
-          {
-            echo "### 🧪 Test Results"
-            echo ""
-            echo "| Metric | Count |"
-            echo "|--------|-------|"
-            echo "| ✅ Passed | $PASSED |"
-            echo "| ❌ Failed | $FAILED |"
-            echo "| ⏭️ Skipped | $SKIPPED |"
-            echo "| 📊 Total | $TOTAL |"
-            echo "| ⏱️ Duration | ${ELAPSED}s |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          exit "$EXIT_CODE"
-
-
-      # =========================================================
-      # SONAR END
-      # =========================================================
-
-      # - name: 🏁 SonarQube — End
-        # env:
-          # SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # run: |
-          # dotnet sonarscanner end \
-            # /d:sonar.token="${SONAR_TOKEN}"
-        # continue-on-error: true
-
-      # =========================================================
-      # COVERAGE SUMMARY
-      # =========================================================
-
-      - name: 📊 Parse coverage summary
-        id: coverage-summary
+      - name: Trivy image scan (JSON report)
         if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: latest
+          image-ref: ${{ env.APP_NAME }}:pr-scan
+          scanners: vuln
+          format: json
+          output: trivy-image-report.json
+          exit-code: "0"
+          severity: "HIGH,CRITICAL"
+        continue-on-error: true
+
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: trivy-image-report
+          path: trivy-image-report.json
+          if-no-files-found: ignore
+
+  # =========================================================================
+  # PUSH to dev: Build & Push image to dev/staging ECR account
+  # (No deploy here — staging workflow pulls and deploys)
+  # =========================================================================
+  build-and-push:
+    name: 🚀 Build & Push to ECR (dev/staging account)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ steps.meta.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials (dev/staging account)
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure ECR repository exists (keep last 3)
         run: |
-          COVERAGE_FILE=$(
-            find ./TestResults \
-              -name "coverage.opencover.xml" \
-              | head -1 2>/dev/null || true
-          )
+          if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
+            aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+          fi
+          aws ecr put-lifecycle-policy --repository-name "$ECR_REPOSITORY" --lifecycle-policy-text '{
+            "rules": [{
+              "rulePriority": 1,
+              "description": "Keep only the last 3 images",
+              "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 3},
+              "action": {"type": "expire"}
+            }]
+          }' >/dev/null
 
-          if [ -z "$COVERAGE_FILE" ]; then
-            echo "⚠️ No coverage file found"
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
 
-            printf 'line_coverage=N/A\n' \
-              >> "$GITHUB_OUTPUT"
+      - name: Build metadata
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          safe() { printf '%s' "$1" | tr -c 'A-Za-z0-9._/@+,-' '_'; }
 
-            exit 0
+          SHORT_SHA="${GITHUB_SHA::12}"
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "$SHORT_SHA")
+
+          PR_NUMBER=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+            --jq '.[0].number // empty' 2>/dev/null || true)
+          PR_AUTHOR=""; PR_APPROVERS=""
+          if [ -n "$PR_NUMBER" ]; then
+            PR_AUTHOR=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              --jq '.user.login' 2>/dev/null || true)
+            PR_APPROVERS=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
+              --jq '.[] | select(.state=="APPROVED") | .user.login' 2>/dev/null \
+              | sort -u | paste -sd, - || true)
           fi
 
-          set +o pipefail
-
-          LINE_RATE=$(
-            grep \
-              -oP 'sequenceCoverage="\K[0-9.]+' \
-              "$COVERAGE_FILE" |
-            head -1
-          )
-
-          BRANCH_RATE=$(
-            grep \
-              -oP 'branchCoverage="\K[0-9.]+' \
-              "$COVERAGE_FILE" |
-            head -1
-          )
-
-          set -o pipefail
-
-          LINE_RATE="${LINE_RATE:-0}"
-          BRANCH_RATE="${BRANCH_RATE:-0}"
-
-          [[ "$LINE_RATE" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
-            || LINE_RATE="0"
-
-          [[ "$BRANCH_RATE" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
-            || BRANCH_RATE="0"
-
-          printf 'line_coverage=%s\n' "$LINE_RATE" \
-            >> "$GITHUB_OUTPUT"
-
           {
-            echo "### 📊 Code Coverage"
-            echo ""
-            echo "| Type | Coverage |"
-            echo "|------|----------|"
-            printf "| 📝 Line/Sequence | %s%% |\n" "$LINE_RATE"
-            printf "| 🌿 Branch | %s%% |\n" "$BRANCH_RATE"
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "short_sha=${SHORT_SHA}"
+            echo "image=${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "version=$(safe "$VERSION")"
+            echo "branch=$(safe "$GITHUB_REF_NAME")"
+            echo "run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "actor=$(safe "$GITHUB_ACTOR")"
+            echo "pr_number=$(safe "$PR_NUMBER")"
+            echo "pr_author=$(safe "$PR_AUTHOR")"
+            echo "pr_approvers=$(safe "$PR_APPROVERS")"
+          } >> "$GITHUB_OUTPUT"
 
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      # =========================================================
-      # TEST REPORT
-      # =========================================================
-
-      - name: 📝 Publish test results
-        uses: dorny/test-reporter@v1
-        if: always()
+      - name: Build, tag, and push image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
-          name: Test Results
-          path: '**/TestResults/**/*.trx'
-          reporter: dotnet-trx
-          fail-on-empty: true
-          fail-on-error: true
-      # =========================================================
-      # PR SUMMARY
-      # =========================================================
+          context: .
+          file: Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
+            ${{ steps.meta.outputs.image }}:dev-latest
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_VERSION=${{ steps.meta.outputs.version }}
+            BUILT_AT=${{ steps.meta.outputs.built_at }}
+            GIT_BRANCH=${{ steps.meta.outputs.branch }}
+            BUILD_RUN_URL=${{ steps.meta.outputs.run_url }}
+            BUILD_ACTOR=${{ steps.meta.outputs.actor }}
+            PR_NUMBER=${{ steps.meta.outputs.pr_number }}
+            PR_AUTHOR=${{ steps.meta.outputs.pr_author }}
+            PR_APPROVERS=${{ steps.meta.outputs.pr_approvers }}
+          provenance: false
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
 
-      - name: ✅ PR Quality Gate Summary
-        if: always()
+      - name: Trivy scan on pushed image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
+          scanners: vuln
+          format: table
+          exit-code: "0"
+          severity: "HIGH,CRITICAL"
+
+      - name: Summary
         run: |
-          BUILD_STATUS="${{ steps.build.outcome }}"
-          TEST_STATUS="${{ steps.test.outcome }}"
-          COVERAGE="${{ steps.coverage-summary.outputs.line_coverage }}"
-
-          STATUS_ICON() {
-            [ "$1" = "success" ] &&
-              echo "✅" ||
-              echo "❌"
-          }
-
           {
-            echo "## 🎯 Dev CI Summary"
+            echo "## ✅ Image Pushed to dev/staging ECR"
             echo ""
-            echo "| Check | Status |"
-            echo "|-------|--------|"
-            echo "| 🏗️ Build | $(STATUS_ICON "$BUILD_STATUS") ${BUILD_STATUS^} |"
-            echo "| 🧪 Tests | $(STATUS_ICON "$TEST_STATUS") ${TEST_STATUS^} |"
-            echo "| 📊 Coverage | ${COVERAGE}% |"
-            echo ""
-            echo "> Commit \`${{ env.COMMIT_SHA }}\`"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Image | \`${{ steps.meta.outputs.image }}\` |"
+            echo "| SHA tag | \`${{ steps.meta.outputs.short_sha }}\` |"
+            echo "| Also tagged | \`dev-latest\` |"
+            echo "| Version | \`${{ steps.meta.outputs.version }}\` |"
+            echo "| Built at | ${{ steps.meta.outputs.built_at }} |"
           } >> "$GITHUB_STEP_SUMMARY"

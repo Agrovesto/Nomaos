@@ -11,8 +11,6 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
         public RateLimitFeature OTP { get; set; }
         public RateLimitFeature LOGIN { get; set; }
         public RateLimitFeature RESET_PASSWORD { get; set; }
-        public RateLimitFeature FORGOT_CREDENTIAL { get; set; }
-        public RateLimitFeature FORGOT_CREDENTIAL_IP { get; set; }
 
         public class RateLimitFeature
         {

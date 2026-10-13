@@ -233,7 +233,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? BusinessCode { get; set; }
         public string LocationName { get; set; }
         public long LocationTypeId { get; set; }
-        public string OwnerShipType { get; set; } = "Organization";
+        public string OwnerShipType { get; set; }
         public List<long> ModuleIds { get; set; } = new();
         public long StateId { get; set; }
         public long LgaId { get; set; }

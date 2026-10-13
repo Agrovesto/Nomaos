@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
@@ -25,6 +25,7 @@ using static Agrovesto.Backend.Core.Models.Common.Constants;
 namespace Agrovesto.Backend.API.Controllers
 {
     [Route("api/admin")]
+    [Authorize]
     //[ApiController]
     [ApiExplorerSettings(IgnoreApi = true)]
     public class AdminController : BaseController
@@ -155,7 +156,6 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
-        [AllowAnonymous]
         [HttpPost("inputfinancing-category")]
         public async Task<IActionResult> CreateInputFinancingCategory([FromBody] ProductCategoryDto model,
 
@@ -252,7 +252,6 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
-        [AllowAnonymous]
         [HttpPost("organization-product-category")]
         public async Task<IActionResult> CreateProductCategoryAsync([FromBody] ProductCategoryDto model,
 
@@ -308,7 +307,6 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        [AllowAnonymous]
         [HttpPost("create-email-template")]
         public async Task<IActionResult> EmailTemplate()
         {
@@ -349,7 +347,6 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
-        [AllowAnonymous]
         [HttpPost("create-storage-category")]
         public async Task<IActionResult> StorageCategory([FromBody] StorageCategory model, [FromQuery] ListQueryParams args)
         {
@@ -408,7 +405,6 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        [AllowAnonymous]
         [HttpPost("create-temperature-control-type")]
         public async Task<IActionResult> TemperaturControlType([FromBody] TemperatureControlType model, [FromQuery] ListQueryParams args)
         {
@@ -467,7 +463,6 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        [AllowAnonymous]
         [HttpPost("create-system-module")]
         public async Task<IActionResult> CreateSystemModules([FromBody] Module model, [FromQuery] ListQueryParams args)
         {
@@ -526,7 +521,6 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        [AllowAnonymous]
         [HttpPost("create-location-type")]
         public async Task<IActionResult> LocationType([FromBody] LocationTypeModel model, [FromQuery] ListQueryParams args)
         {
@@ -584,7 +578,6 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        [AllowAnonymous]
         [HttpPost("create-membership-type")]
         public async Task<IActionResult> MemberShipType([FromBody] MemberShipTypeModel model, [FromQuery] BusinessRegistrationArgs args)
         {
@@ -758,6 +751,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("create-admin")]
+        [Authorize(Roles = "SystemAdmin,Super Admin")]
         public async Task<IActionResult> CreateAdminUser([FromBody] UserModel model)
         {
             //var isAdmin = User.Claims.ToArray().IsAdmin();
@@ -812,6 +806,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("create-user")]
+        [Authorize(Roles = "SystemAdmin,Super Admin")]
         public async Task<IActionResult> CreateAgrovestoUser([FromBody] UserModel model, [FromQuery] string roleName)
         {
             

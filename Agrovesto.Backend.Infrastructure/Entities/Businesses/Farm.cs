@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Enums;
 using NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
@@ -65,11 +65,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? FarmSizeType { get; set; } //Sqm, //Kilometre //hectare, acre
         public MappingStatus MappingStatus { get; set; } = MappingStatus.UnMapped;
         public Polygon? FarmPolygon { get; set; } // to get areas in degress, FarmPolygon.Area
-
-
         public string? PrimaryCrop { get; set; }
     }
- 
     public class FarmAllocation
     {
         [Key]

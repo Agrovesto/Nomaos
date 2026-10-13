@@ -23,9 +23,9 @@ namespace Agrovesto.Backend.API.Controllers
     //[ApiController]
     //[Authorize]
     // [ValidateModelFilter]
-   
-    
-    
+
+
+
     public class BaseController : ControllerBase, IAsyncActionFilter
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -53,14 +53,14 @@ namespace Agrovesto.Backend.API.Controllers
         }
         protected IActionResult? DetermineRoleViewAccess(SubscriptionQueryFilter filter)
         {
-            // Organization is never itself a selectable "view" role 
+            // Organization is never itself a selectable "view" role
             // only count the other roles as candidates.
             var eligibleRoles = new List<string>();
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase))
                 eligibleRoles.Add(UserType.Agent.ToString());
 
-            
+
             if (CurrentUserRoles.Contains("MemberShip", StringComparer.OrdinalIgnoreCase))
                 eligibleRoles.Add(UserType.MemberShip.ToString());
 
@@ -73,9 +73,9 @@ namespace Agrovesto.Backend.API.Controllers
 
             // No eligible roles at all (e.g. pure Organization user, or no roles)
             if (eligibleRoles.Count == 0)
-                return null; 
+                return null;
 
-           
+
             if (eligibleRoles.Count == 1 && string.IsNullOrWhiteSpace(suppliedRole))
             {
                 filter.CurrentLoggedInUserRole = eligibleRoles[0];
@@ -400,9 +400,9 @@ namespace Agrovesto.Backend.API.Controllers
             TryReadJwt()?
                 .Claims.FirstOrDefault(x => x.Type.Equals("PhoneNumber", StringComparison.OrdinalIgnoreCase))
                 ?.Value;
-     
-        
-        
+
+
+
         public string? CurrentUserRole
         {
             get
@@ -493,7 +493,7 @@ namespace Agrovesto.Backend.API.Controllers
         // For endpoints that can't work without it
         protected string RequireBusinessCode()
         {
-            var code = CurrentBusinessCode; 
+            var code = CurrentBusinessCode;
 
             if (code is null)
                 throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
@@ -505,11 +505,11 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 if (_httpContextAccessor.HttpContext?.Request.Headers.TryGetValue(HeaderNames.Authorization, out var tokenValues) == true)
                 {
-                    var token = tokenValues.ToString().Trim(); 
+                    var token = tokenValues.ToString().Trim();
 
                     if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        return token.Substring("Bearer ".Length).Trim(); 
+                        return token.Substring("Bearer ".Length).Trim();
                     }
                 }
                 return string.Empty;

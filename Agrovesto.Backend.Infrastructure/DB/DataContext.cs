@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
@@ -566,7 +566,10 @@ namespace Agrovesto.Backend.Infrastructure.DB
             });
 
             // OnModelCreating
-            modelBuilder.Entity<User>().HasIndex(u => u.AdminCode).IsUnique();          // multiple NULLs allowed in MySQL
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.AdminCode)
+                .IsUnique()
+                .HasFilter("[AdminCode] IS NOT NULL");
             modelBuilder.Entity<AdminInvitation>().HasIndex(i => i.TokenHash).IsUnique();
             modelBuilder.Entity<AdminInvitation>().HasIndex(i => i.UserId);
 
