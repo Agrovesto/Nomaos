@@ -6,7 +6,12 @@ on:
       - staging
 
   workflow_dispatch:
-
+    inputs:
+      image_tag:
+        description: "Source ECR tag to deploy (for example, an immutable short SHA)."
+        required: false
+        default: "dev-latest"
+        type: string
 
 concurrency:
   group: "staging-deploy"
@@ -40,7 +45,7 @@ jobs:
       id-token: write
       contents: read
     outputs:
-      image: ${{ steps.resolve.outputs.image }}
+      image_ref: ${{ steps.resolve.outputs.image_ref }}
       tag: ${{ steps.resolve.outputs.deploy_tag }}
     steps:
       - name: Configure AWS credentials
@@ -53,53 +58,88 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
 
-      - name: Resolve image by digest
+      - name: Resolve image digest from ECR
         id: resolve
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          SOURCE_TAG_INPUT: ${{ inputs.image_tag }}
         run: |
-          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-          IMAGE="${REGISTRY}/${ECR_REPOSITORY}"
+          set -euo pipefail
 
-          # Deploy the image published by the dev workflow.         
-          # SOURCE_TAG="${{ inputs.image_tag }}"
-          # SOURCE_TAG="${SOURCE_TAG:-dev-latest}"
-            SOURCE_TAG="dev-latest"
+          IMAGE="${REGISTRY}/${ECR_REPOSITORY}"
+          SOURCE_TAG="${SOURCE_TAG_INPUT:-dev-latest}"
+          if [[ ! "$SOURCE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Invalid ECR image tag: ${SOURCE_TAG}"
+            exit 1
+          fi
 
           echo "Looking up ${IMAGE}:${SOURCE_TAG} ..."
 
-          DIGEST=$(aws ecr describe-images \
+          # One ECR lookup returns both the image digest and its tags.
+          if ! IMAGE_DETAIL=$(aws ecr describe-images \
             --repository-name "$ECR_REPOSITORY" \
-            --image-ids imageTag="$SOURCE_TAG" \
-            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || echo "")
-
-          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            --image-ids "imageTag=${SOURCE_TAG}" \
+            --query 'imageDetails[0]' --output json 2>/dev/null); then
+            IMAGE_DETAIL='null'
+          fi
+          DIGEST=$(jq -r '.imageDigest // empty' <<< "$IMAGE_DETAIL")
+          if [[ -z "$DIGEST" || "$DIGEST" == "None" ]]; then
             echo "::error::Image ${IMAGE}:${SOURCE_TAG} not found in ECR. Dev workflow must push it first."
             exit 1
           fi
 
-          # Prefer the immutable short-sha tag on this digest (not a moving alias).
-          CONCRETE_TAG=$(aws ecr describe-images \
-            --repository-name "$ECR_REPOSITORY" \
-            --image-ids imageDigest="$DIGEST" \
-            --query 'imageDetails[0].imageTags' --output json \
-            | jq -r '.[] | select(. != "dev-latest" and . != "staging-latest" and . != "prod-latest") | .' \
-            | head -n1)
+          # Resolve moving aliases to the immutable short-SHA tag for reporting.
+          CONCRETE_TAG=$(jq -r '
+            (.imageTags // [])
+            | map(select(. != "dev-latest" and . != "staging-latest" and . != "prod-latest"))
+            | sort
+            | .[0] // empty
+          ' <<< "$IMAGE_DETAIL")
+          case "$SOURCE_TAG" in
+            dev-latest|staging-latest|prod-latest)
+              DEPLOY_TAG="${CONCRETE_TAG:-$SOURCE_TAG}"
+              ;;
+            *)
+              DEPLOY_TAG="$SOURCE_TAG"
+              ;;
+          esac
 
-          DEPLOY_TAG="${CONCRETE_TAG:-$SOURCE_TAG}"
+          IMAGE_REF="${IMAGE}@${DIGEST}"
 
-          # Re-tag digest as staging-latest (idempotent).
-          MANIFEST=$(aws ecr batch-get-image \
-            --repository-name "$ECR_REPOSITORY" \
-            --image-ids imageDigest="$DIGEST" \
-            --query 'images[0].imageManifest' --output text)
+          # Keep staging-latest current for the production promotion workflow.
+          # The describe-images result includes all tags on this digest, so skip
+          # the manifest read/write when the alias is already correct.
+          if jq -e '(.imageTags // []) | index("staging-latest") != null' \
+            <<< "$IMAGE_DETAIL" >/dev/null; then
+            echo "staging-latest already points to ${DIGEST}; skipping re-tag."
+          else
+            MANIFEST=$(aws ecr batch-get-image \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-ids "imageDigest=${DIGEST}" \
+              --query 'images[0].imageManifest' --output text)
+            if [[ -z "$MANIFEST" || "$MANIFEST" == "None" ]]; then
+              echo "::error::Could not read the ECR manifest for ${DIGEST}."
+              exit 1
+            fi
 
-          aws ecr put-image \
-            --repository-name "$ECR_REPOSITORY" \
-            --image-tag "staging-latest" \
-            --image-manifest "$MANIFEST" >/dev/null 2>&1 || \
-            echo "staging-latest already points to this digest."
+            if ! aws ecr put-image \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-tag "staging-latest" \
+              --image-manifest "$MANIFEST" >/dev/null 2>&1; then
+              CURRENT_ALIAS_DIGEST=$(aws ecr describe-images \
+                --repository-name "$ECR_REPOSITORY" \
+                --image-ids imageTag=staging-latest \
+                --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
+              if [[ "$CURRENT_ALIAS_DIGEST" != "$DIGEST" ]]; then
+                echo "::error::Could not update staging-latest to ${DIGEST}."
+                exit 1
+              fi
+              echo "staging-latest already points to this digest."
+            fi
+          fi
 
           {
-            echo "image=${IMAGE}"
+            echo "image_ref=${IMAGE_REF}"
             echo "deploy_tag=${DEPLOY_TAG}"
           } >> "$GITHUB_OUTPUT"
 
@@ -108,7 +148,7 @@ jobs:
             echo ""
             echo "| Field | Value |"
             echo "|-------|-------|"
-            echo "| Image | \`${IMAGE}\` |"
+            echo "| Image | \`${IMAGE_REF}\` |"
             echo "| Source tag | \`${SOURCE_TAG}\` |"
             echo "| Deploy tag | \`${DEPLOY_TAG}\` |"
             echo "| Digest | \`${DIGEST}\` |"
@@ -160,33 +200,45 @@ jobs:
       - name: Resolve target instance
         id: instance
         run: |
-          IDS=$(aws ec2 describe-instances \
+          set -euo pipefail
+          INSTANCE_IDS=$(aws ec2 describe-instances \
             --filters "Name=tag:Name,Values=${APP_NAME}-${TARGET_ENV}" \
                       "Name=instance-state-name,Values=running" \
-            --query "Reservations[].Instances[].InstanceId" --output text)
-          COUNT=$(echo "$IDS" | wc -w)
-          if [ "$COUNT" -ne 1 ]; then
+            --query "Reservations[].Instances[].InstanceId" --output json)
+          COUNT=$(jq 'length' <<< "$INSTANCE_IDS")
+          if [[ "$COUNT" -ne 1 ]]; then
             echo "::error::Expected exactly 1 running instance tagged ${APP_NAME}-${TARGET_ENV}, found ${COUNT}"
             exit 1
           fi
-          echo "id=${IDS}" >> "$GITHUB_OUTPUT"
+          INSTANCE_ID=$(jq -r '.[0]' <<< "$INSTANCE_IDS")
+          echo "id=${INSTANCE_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Verify deploy kit is present
         run: |
           set -euo pipefail
-          echo "Deploy kit contents:"
-          find deploy -type f | sort
-          test -f deploy/scripts/deploy.sh
-          test -f deploy/scripts/lib.sh
-          test -f deploy/scripts/migrate-data.sh
-          test -f deploy/scripts/rollback.sh
-          test -f deploy/scripts/status.sh
-          test -f deploy/scripts/bootstrap.sh
-          test -f deploy/scripts/cutover-from-systemd.sh
+          for path in \
+            deploy/compose \
+            deploy/env \
+            deploy/nginx \
+            deploy/scripts/deploy.sh \
+            deploy/scripts/lib.sh \
+            deploy/scripts/migrate-data.sh \
+            deploy/scripts/rollback.sh \
+            deploy/scripts/status.sh \
+            deploy/scripts/bootstrap.sh \
+            deploy/scripts/cutover-from-systemd.sh \
+            deploy/Makefile; do
+            if [[ ! -e "$path" ]]; then
+              echo "::error::Required deploy-kit path is missing: ${path}"
+              exit 1
+            fi
+          done
+          echo "Verified deploy kit and required blue/green helpers."
 
       - name: Deploy via SSM (blue/green)
         env:
-          IMAGE: ${{ needs.resolve-image.outputs.image }}:${{ needs.resolve-image.outputs.tag }}
+          IMAGE: ${{ needs.resolve-image.outputs.image_ref }}
+          DEPLOY_TAG: ${{ needs.resolve-image.outputs.tag }}
           INSTANCE_ID: ${{ steps.instance.outputs.id }}
         run: |
           if [ "$TARGET_ENV" = "prod" ]; then ASPNET_ENV=Production; else ASPNET_ENV=Staging; fi
@@ -223,14 +275,14 @@ jobs:
           CMD_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name AWS-RunShellScript \
-            --comment "deploy ${IMAGE##*:}" \
+            --comment "deploy ${IMAGE##*@}" \
             --timeout-seconds 600 \
             --parameters "$PARAMS" \
             --query Command.CommandId --output text)
           echo "SSM command: $CMD_ID"
 
           STATUS=Pending
-          for _ in $(seq 1 120); do
+          for ((attempt = 1; attempt <= 120; attempt++)); do
             STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
               --query Status --output text 2>/dev/null || echo Pending)
             case "$STATUS" in Pending|InProgress|Delayed) sleep 5 ;; *) break ;; esac
@@ -250,10 +302,11 @@ jobs:
         if: vars.HEALTH_URL != ''
         env:
           HEALTH_URL: ${{ vars.HEALTH_URL }}
+          DEPLOY_TAG: ${{ needs.resolve-image.outputs.tag }}
         run: |
-          for _ in $(seq 1 30); do
+          for ((attempt = 1; attempt <= 30; attempt++)); do
             if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null; then
-              echo "Healthy: ${{ needs.resolve-image.outputs.tag }}"
+              echo "Healthy: ${DEPLOY_TAG}"
               exit 0
             fi
             sleep 5
@@ -271,7 +324,7 @@ jobs:
             echo "|-------|-------|"
             echo "| Environment | \`${TARGET_ENV}\` |"
             echo "| Instance | \`${{ steps.instance.outputs.id }}\` |"
-            echo "| Image | \`${{ needs.resolve-image.outputs.image }}:${{ needs.resolve-image.outputs.tag }}\` |"
+            echo "| Image | \`${{ needs.resolve-image.outputs.image_ref }}\` |"
             echo "| Entrypoint | \`deploy/scripts/deploy.sh\` |"
             echo "| Kit | compose, env, nginx, lib, migrate-data, rollback, status, bootstrap, cutover |"
           } >> "$GITHUB_STEP_SUMMARY"
