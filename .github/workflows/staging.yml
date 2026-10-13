@@ -191,9 +191,6 @@ jobs:
         run: |
           if [ "$TARGET_ENV" = "prod" ]; then ASPNET_ENV=Production; else ASPNET_ENV=Staging; fi
 
-          # Ship the entire deploy/ tree from git so the host never drifts.
-          # deploy.sh (entrypoint) factors in lib.sh + migrate/rollback/status/etc.
-          # The wrapper is POSIX sh (SSM may run it under dash); scripts run under bash.
           TAR_B64=$(tar -C deploy -czf - . | base64 -w0)
 
           SCRIPT=$(cat <<EOF
@@ -206,6 +203,12 @@ jobs:
 
           # Ensure scripts are executable after unpack
           chmod +x scripts/*.sh 2>/dev/null || true
+
+          # -------------------------------------------------------------
+          # Authenticate Docker against ECR on the target EC2 instance
+          # -------------------------------------------------------------
+          REGISTRY=\$(echo '${IMAGE}' | cut -d'/' -f1)
+          aws ecr get-login-password --region '${AWS_REGION}' | docker login --username AWS --password-stdin "\$REGISTRY"
 
           # Entry point — deploy.sh sources lib.sh and may call
           # migrate-data / status / rollback as part of the process.
