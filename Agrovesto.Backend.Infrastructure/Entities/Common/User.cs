@@ -1,4 +1,5 @@
 ﻿
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -47,13 +48,24 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     }
     public class User : IdentityUser
     {
+        public bool IsAdminUser { get; set; } = false;
+        // On User (or an AdminProfile table if you'd rather not widen User)
+        public string? Department { get; set; }
+        public string? AdminCode { get; set; } = default!;   // ADM000124
+        public AdminUserStatus? Status { get; set; }
+        /// <summary>
+        /// /admin panel
+        /// </summary>
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
         public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
         public string? OnboardingError { get; set; }
         public string? Salt { get; set; }
         public string? PhoneNumber { get; set; }
-        public string? Pin { get; set; } 
+        public string? Pin { get; set; }
         public string? PinEncrypt { get; set; }
-        public string? Password { get; set; }         
+        public string? Password { get; set; }
         public string UserType { get; set; }
         public string? OTP { get; set; }
         public DateTimeOffset CreatedOn { get; set; } //= DateTimeOffset.Now;
@@ -64,15 +76,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
         public string? Name { get; set; }
         public string? BusinessCode { get; set; }
-        public ICollection<UserBusiness> UserBusinesses
-        { get; set; }
-    = new HashSet<UserBusiness>();
-
+        public ICollection<UserBusiness> UserBusinesses { get; set; } = new HashSet<UserBusiness>();
         public string? DateOfBirth { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
+        public string? Gender { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
-     
+
         public bool IsPhoneVerified { get; set; } = false;
         public bool IsEmailVerified { get; set; } = false;
 
@@ -83,6 +93,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsNinVerified { get; set; } = false;
         public bool IsBvnVerified { get; set; } = false;
         public SignupMethod SignupMethod { get; set; } //= SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
+
+        public ICollection<ApplicationUserRole> UserRoles { get; set; } = new List<ApplicationUserRole>();
     }
 
     public class UserOrganization
@@ -92,8 +104,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsActive { get; set; } = true;
         public string OrganizationCode { get; set; }
     }
-   
-    
+
+
     public class OneTimePassword
     {
         public long Id { get; set; }

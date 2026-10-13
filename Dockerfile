@@ -38,17 +38,28 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     set -eux; \
     echo "=== PUBLISH ==="; \
-    dotnet publish \
+    if dotnet publish \
       Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
       -c Release \
       -o /app/publish \
       --no-restore \
-      -maxcpucount \
+      --maxcpucount \
       /p:UseAppHost=false \
       /p:EnableSourceControlManagerQueries=false \
       /p:PublishTrimmed=false \
       /p:DebugType=None \
-      /p:DebugSymbols=false
+      /p:DebugSymbols=false \
+      -v:normal \
+      > /tmp/publish.log 2>&1; then \
+      cat /tmp/publish.log; \
+    else \
+      rc=$?; \
+      echo "=== PUBLISH ERRORS ==="; \
+      grep -n -i -E -C 3 \
+        'error CS|error NU|error MSB|error NETSDK|: error |Exception|license' \
+        /tmp/publish.log || cat /tmp/publish.log; \
+      exit "$rc"; \
+    fi
 
 ########################################
 # STAGE 2 — RUNTIME
@@ -92,7 +103,7 @@ WORKDIR /app
 ########################################
 ENV DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
-    DOTNET_PRINT_TELEMETRY_MESSAGE=false \
+    DOTNET_PRINT_TELEMETRY_MESSAGE=true \
     DOTNET_GCConserveMemory=5 \
     DOTNET_GCHeapHardLimitPercent=75 \
     DOTNET_ThreadPool_UnfairSemaphoreSpinLimit=6 \
@@ -121,7 +132,11 @@ RUN mkdir -p /app/logs \
 #   green -> 127.0.0.1:5008:5008
 #
 ########################################
-
+HEALTHCHECK --interval=30s \
+  --timeout=5s \
+  --start-period=40s \
+  --retries=3 \
+  CMD curl --fail --silent http://127.0.0.1:5008/health/ready || exit 1
 ########################################
 # NON-ROOT
 ########################################

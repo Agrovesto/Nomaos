@@ -17,11 +17,8 @@ public class NomaosSerilogTests
     private static Func<string, string?> Env(Dictionary<string, string?> values) =>
         key => values.TryGetValue(key, out var value) ? value : null;
 
-    private static Func<string, string?> NoCloudWatch(params (string Key, string? Value)[] values)
-    {
-        var map = values.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-    }
-
+    private static Func<string, string?> NoCloudWatch(params (string Key, string? Value)[] values) =>
+        Env(values.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
     private static string CaptureConsole(Action action)
     {
         var original = Console.Out;
@@ -180,4 +177,4 @@ public class NomaosSerilogTests
             .GetProperty("RenderedMessage").GetString().Should().Contain("starting up");
     }
 
-    [Theory]
+}

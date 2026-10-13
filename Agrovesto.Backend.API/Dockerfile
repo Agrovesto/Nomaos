@@ -7,8 +7,7 @@ ARG DOTNET_RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet:8.0-alpine
 # STAGE 1 — RESTORE
 ########################################
 
-FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS restore
-
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:8.0 AS restore
 ARG TARGETARCH
 
 WORKDIR /src
@@ -119,7 +118,7 @@ RUN printf '%s\n' "$COMMIT_SHA" \
 # STAGE 3 — RUNTIME
 ########################################
 
-FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
 ########################################
 # Runtime dependencies

@@ -1,6 +1,7 @@
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Admin;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -9,6 +10,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
@@ -30,6 +32,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using FarmerPersonalInfoDto = Agrovesto.Backend.Core.Models.Businesses.FarmerPersonalInfoDto;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
@@ -69,9 +72,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> ValidateUserPinAsync(string userId, string plainPin);
         Task<bool> IsRevokedAsync(string jti);
         Task RevokeAsync(string jti, string userId, DateTime tokenExpiry);
-        Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
-        Task<CreateUserResult> CreateNewUser(OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
-        Task<IdentityRole> GetRoleAsync(string roleName);
+        Task LogoutAsync(string userId, string jti, DateTime tokenExpiry, string? sessionId);
+        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent);
+        Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
+        Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, Role role);
+        Task<CreateUserResult> CreateNewUser(OnboardingRequestModel model, OnBoardingArgs args, Role role);
+        Task<Role> GetRoleAsync(string roleName);
         Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work);
         Task<UserModel> OnUpdateUserProfileAsync(string userId, ProfileRequestModel model, string modifiedBy = null);
     }
@@ -83,11 +89,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private readonly SignInManager<User> _signInManager;
         private readonly IConfiguration _configuration;
         private readonly ILogger<OnboardingRepository> _log;
+        private readonly IClientInfoProvider _client;
         public OnboardingRepository(DataContext context,
             SignInManager<User> signInManager,
 
         IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
-            ILogger<OnboardingRepository> log)
+            ILogger<OnboardingRepository> log, IClientInfoProvider client)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -95,6 +102,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
             _signInManager = signInManager;
+            _client = client;
         }
         public async Task RevokeAsync(string jti, string userId, DateTime tokenExpiry)
         {
@@ -117,12 +125,360 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             return await _context.RevokedTokens.AnyAsync(x => x.Jti == jti);
         }
+        public async Task LogoutAsync(string userId, string jti, DateTime tokenExpiry, string? sessionId)
+        {
+            await RevokeAsync(jti, userId, tokenExpiry);
+
+            if (string.IsNullOrWhiteSpace(sessionId))
+                return;
+
+            await _context.RefreshTokens
+                .Where(token => token.UserId == userId && token.FamilyId == sessionId && token.RevokedOn == null)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(token => token.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(token => token.RevokedReason, "Logout"));
+        }
+
+        public async Task<AdminLoginResult> AdminLogin(
+            AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
+        {
+            if (model is null || model.LoginMethod != LoginType.Password ||
+                string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Password))
+            {
+                return AdminLoginResult.Fail(AdminLoginStatus.InvalidCredentials, AdminMessages.InvalidCredentials);
+            }
+
+            var email = model.Email.Trim();
+            var user = await _userManager.FindByEmailAsync(email);
+            user ??= await _userManager.FindByNameAsync(email);
+
+            // Keep unknown users and bad passwords indistinguishable to callers.
+            if (user is null || !await _userManager.CheckPasswordAsync(user, model.Password))
+            {
+                if (user is not null)
+                    await RecordAdminLoginHistoryAsync(user.Id, false, "Invalid credentials", ipAddress, userAgent);
+
+                return AdminLoginResult.Fail(AdminLoginStatus.InvalidCredentials, AdminMessages.InvalidCredentials);
+            }
+
+            if (!user.IsAdminUser)
+            {
+                await RecordAdminLoginHistoryAsync(user.Id, false, "No admin account", ipAddress, userAgent);
+                return AdminLoginResult.Fail(AdminLoginStatus.NoAdminAccess, AdminMessages.NoAdminAccess);
+            }
+
+            if (await _userManager.IsLockedOutAsync(user) || !user.IsActive ||
+                (user.Status.HasValue && user.Status.Value != AdminUserStatus.Active))
+            {
+                var inactiveMessage = user.Status == AdminUserStatus.Deactivated
+                    ? AdminMessages.Deactivated
+                    : user.Status == AdminUserStatus.Suspended
+                        ? AdminMessages.Suspended
+                        : AdminMessages.AccountInactive;
+                await RecordAdminLoginHistoryAsync(user.Id, false, "Account inactive", ipAddress, userAgent);
+                return AdminLoginResult.Fail(AdminLoginStatus.AccountInactive, inactiveMessage);
+            }
+
+            var configuredBusinessId = _configuration.GetValue<long>("AdminPanel:BusinessId");
+            if (configuredBusinessId <= 0)
+                throw new InvalidOperationException("AdminPanel:BusinessId is not configured.");
+
+            var activeBusiness = await _context.UserBusinesses
+                .Include(x => x.Business)
+                .FirstOrDefaultAsync(x => x.UserId == user.Id &&
+                                          x.BusinessId == configuredBusinessId &&
+                                          x.IsActive);
+
+            if (activeBusiness?.Business is null ||
+                (!string.IsNullOrWhiteSpace(businessCode) &&
+                 !string.Equals(activeBusiness.Business.BusinessCode, businessCode, StringComparison.OrdinalIgnoreCase)))
+            {
+                await RecordAdminLoginHistoryAsync(user.Id, false, "No admin access", ipAddress, userAgent);
+                return AdminLoginResult.Fail(AdminLoginStatus.NoAdminAccess, AdminMessages.NoAdminAccess);
+            }
+
+            var access = await GetAdminAccessAsync(user.Id, activeBusiness.BusinessId);
+            if (!access.HasAccess)
+            {
+                await RecordAdminLoginHistoryAsync(user.Id, false, "No admin access", ipAddress, userAgent);
+                return AdminLoginResult.Fail(AdminLoginStatus.NoAdminAccess, AdminMessages.NoAdminAccess);
+            }
+
+            var loginModel = new LoginModel
+            {
+                Email = email,
+                Password = model.Password,
+                LoginMethod = LoginType.Password,
+                BusinessCode = activeBusiness.Business.BusinessCode
+            };
+            var weak = CheckWeakCredentials(user, loginModel);
+            var familyId = Guid.NewGuid().ToString("N");
+            var tokens = await IssueAdminTokensAsync(
+                user, activeBusiness, weak.IsWeak, weak.Message, familyId, ipAddress, access);
+
+            await RecordAdminLoginHistoryAsync(user.Id, true, null, ipAddress, userAgent);
+
+            return AdminLoginResult.Ok(new AdminLoginResponseModel
+            {
+                Token = tokens.Token,
+                TokenType = tokens.TokenType,
+                ExpiresOn = tokens.ExpiresOn,
+                RefreshToken = tokens.RefreshToken ?? string.Empty,
+                RefreshTokenExpiresOn = tokens.RefreshTokenExpiresOn,
+                TwoFactorEnabled = user.TwoFactorEnabled,
+                RequiresCredentialChange = weak.IsWeak,
+                SecurityNotice = weak.IsWeak ? weak.Message : string.Empty
+            });
+        }
+
+        public async Task<(bool Status, string Message, TokenModel Response)> RefreshToken(
+            string refreshToken, string? ipAddress = null)
+        {
+            const string invalid = "Invalid or expired refresh token";
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return (false, invalid, null!);
+
+            var stored = await _context.RefreshTokens
+                .FirstOrDefaultAsync(token => token.TokenHash == HashToken(refreshToken));
+
+            if (stored is null || !stored.IsAdminSession)
+                return (false, invalid, null!);
+
+            if (stored.RevokedOn is not null)
+            {
+                await RevokeRefreshFamilyAsync(stored.FamilyId, "Refresh token reuse detected");
+                return (false, invalid, null!);
+            }
+
+            if (stored.ExpiresOn <= DateTime.UtcNow)
+            {
+                await RevokeRefreshFamilyAsync(stored.FamilyId, "Refresh token expired");
+                return (false, invalid, null!);
+            }
+
+            var user = await _userManager.FindByIdAsync(stored.UserId);
+            if (user is null || await _userManager.IsLockedOutAsync(user) || !user.IsAdminUser || !user.IsActive ||
+                (user.Status.HasValue && user.Status.Value != AdminUserStatus.Active))
+            {
+                await RevokeRefreshFamilyAsync(stored.FamilyId, "Admin account unavailable");
+                return (false, invalid, null!);
+            }
+
+            var activeBusiness = await _context.UserBusinesses
+                .Include(x => x.Business)
+                .FirstOrDefaultAsync(x => x.UserId == user.Id &&
+                                          x.BusinessId == stored.BusinessId &&
+                                          x.IsActive);
+            if (activeBusiness?.Business is null)
+            {
+                await RevokeRefreshFamilyAsync(stored.FamilyId, "Admin business access removed");
+                return (false, invalid, null!);
+            }
+
+            var access = await GetAdminAccessAsync(user.Id, stored.BusinessId);
+            if (!access.HasAccess)
+            {
+                await RevokeRefreshFamilyAsync(stored.FamilyId, "Admin permissions removed");
+                return (false, invalid, null!);
+            }
+
+            // Rotate atomically so two concurrent refresh requests cannot both succeed.
+            var updated = await _context.RefreshTokens
+                .Where(token => token.Id == stored.Id && token.RevokedOn == null)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(token => token.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(token => token.RevokedReason, "Rotated"));
+
+            if (updated == 0)
+            {
+                await RevokeRefreshFamilyAsync(stored.FamilyId, "Concurrent refresh token reuse");
+                return (false, invalid, null!);
+            }
+
+            var securityNotice = stored.RequiresCredentialChange
+                ? "Your credentials are weak or default. Please change them for security."
+                : null;
+            var tokens = await IssueAdminTokensAsync(
+                user, activeBusiness, stored.RequiresCredentialChange, securityNotice,
+                stored.FamilyId, ipAddress, access);
+
+            return (true, "Successful", tokens);
+        }
+
+        private async Task<AdminAccess> GetAdminAccessAsync(string userId, long businessId)
+        {
+            var rows = await _context.UserRoles
+                .AsNoTracking()
+                .Where(userRole => userRole.UserId == userId &&
+                                   userRole.BusinessId == businessId &&
+                                   userRole.IsActive &&
+                                   userRole.Role.IsAvailableToAdmin &&
+                                   (userRole.Role.BusinessId == null || userRole.Role.BusinessId == businessId))
+                .Select(userRole => new
+                {
+                    RoleName = userRole.Role.Name!,
+                    Permissions = userRole.Role.RolePermissions
+                        .Select(rolePermission => rolePermission.Permission.Name)
+                        .ToList()
+                })
+                .ToListAsync();
+
+            var roles = rows.Select(row => row.RoleName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var permissions = rows.SelectMany(row => row.Permissions)
+                .Where(permission => !string.IsNullOrWhiteSpace(permission))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var hasAccess = permissions.Contains(AdminPermissions.AccessPanel, StringComparer.OrdinalIgnoreCase);
+
+            return new AdminAccess(hasAccess, roles, permissions);
+        }
+
+        private async Task<TokenModel> IssueAdminTokensAsync(
+            User user,
+            UserBusiness activeBusiness,
+            bool requiresCredentialChange,
+            string? securityNotice,
+            string familyId,
+            string? ipAddress,
+            AdminAccess access)
+        {
+            var now = DateTime.UtcNow;
+            user.LastLoginDate = now;
+
+            var modules = await _context.BusinessLicenseModules
+                .Where(x => x.BusinessLicense.BusinessId == activeBusiness.BusinessId && x.IsEnabled)
+                .Select(x => x.SystemModule.Code)
+                .ToListAsync();
+            var claims = BuildClaims(
+                user,
+                access.Roles,
+                activeBusiness,
+                new List<OrganizationDto>(),
+                hasPendingOnboarding: false,
+                modules: modules,
+                requiresCredentialChange: requiresCredentialChange);
+            claims.Add(new Claim("SessionId", familyId));
+            claims.Add(new Claim("portal", "admin"));
+            claims.AddRange(access.Permissions
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(permission => new Claim(AdminPermissions.ClaimType, permission)));
+
+            var accessExpiry = now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
+            var accessToken = GenerateJwtToken(claims, accessExpiry);
+            var rawRefreshToken = GenerateRefreshTokenValue();
+            var refreshExpiry = now.AddDays(_configuration.GetValue("JWT:RefreshTokenDays", 7));
+
+            _context.RefreshTokens.Add(new Agrovesto.Backend.Infrastructure.Entities.Common.RefreshToken
+            {
+                UserId = user.Id,
+                BusinessId = activeBusiness.BusinessId,
+                TokenHash = HashToken(rawRefreshToken),
+                FamilyId = familyId,
+                CreatedOn = now,
+                ExpiresOn = refreshExpiry,
+                RequiresCredentialChange = requiresCredentialChange,
+                CreatedByIp = ipAddress,
+                IsAdminSession = true
+            });
+
+            await _context.SaveChangesAsync();
+
+            return new TokenModel
+            {
+                Permissions = access.Permissions,
+                Id = user.Id,
+                Email = user.Email,
+                Name = user.Name,
+                ExpiresOn = accessExpiry,
+                Token = accessToken,
+                RefreshToken = rawRefreshToken,
+                RefreshTokenExpiresOn = refreshExpiry,
+                Roles = access.Roles,
+                Organizations = new List<OrganizationDto>(),
+                phone_number = user.PhoneNumber,
+                TokenType = TokenType.AccessToken,
+                BusinessCode = activeBusiness.Business?.BusinessCode,
+                SecurityNotice = securityNotice ?? string.Empty,
+                Authmethod = user.SignupMethod.ToString(),
+                RequiresCredentialChange = requiresCredentialChange,
+                TwoFactorEnabled = user.TwoFactorEnabled
+            };
+        }
+
+        private async Task RecordAdminLoginHistoryAsync(
+            string userId, bool succeeded, string? failureReason, string? ipAddress, string? userAgent)
+        {
+            var client = _client.Get();
+            var rawUserAgent = string.IsNullOrWhiteSpace(userAgent) ? client.UserAgent : userAgent.Trim();
+            if (rawUserAgent?.Length > 512)
+                rawUserAgent = rawUserAgent[..512];
+
+            _context.AdminLoginHistories.Add(new AdminLoginHistory
+            {
+                UserId = userId,
+                LoggedInAt = DateTimeOffset.UtcNow,
+                Succeeded = succeeded,
+                FailureReason = failureReason,
+                IpAddress = ipAddress ?? client.IpAddress,
+                UserAgent = rawUserAgent,
+                Browser = client.Browser,
+                OperatingSystem = client.OperatingSystem,
+                DeviceType = client.DeviceType,
+                DeviceName = client.DeviceName
+            });
+
+            await _context.SaveChangesAsync();
+        }
+
+        private async Task RevokeRefreshFamilyAsync(string familyId, string reason)
+        {
+            await _context.RefreshTokens
+                .Where(token => token.FamilyId == familyId && token.RevokedOn == null)
+                .ExecuteUpdateAsync(update => update
+                    .SetProperty(token => token.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(token => token.RevokedReason, reason));
+        }
+
+        private static string GenerateRefreshTokenValue() =>
+            Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
+                .Replace('+', '-')
+                .Replace('/', '_')
+                .TrimEnd('=');
+
+        private static string HashToken(string token) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+
         public async Task<bool> IsUserInRoleAsync(string userId, string role)
         {
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return false;
+            var user = await _context.Users.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+            if (user is null)
+                return false;
 
-            var roles = await _userManager.GetRolesAsync(user);
+            var businessId = await _context.UserBusinesses
+                .Where(x => x.UserId == userId && x.IsActive)
+                .OrderByDescending(x => x.IsDefault)
+                .ThenBy(x => x.BusinessId)
+                .Select(x => (long?)x.BusinessId)
+                .FirstOrDefaultAsync();
+
+            if (businessId is null && !string.IsNullOrWhiteSpace(user.BusinessCode))
+            {
+                businessId = await _context.Businesses
+                    .Where(x => x.BusinessCode == user.BusinessCode)
+                    .Select(x => (long?)x.BusinessId)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (businessId is null)
+                return false;
+
+            var roles = await _context.UserRoles
+                .Where(x => x.UserId == userId && x.BusinessId == businessId && x.IsActive)
+                .Select(x => x.Role.Name!)
+                .ToListAsync();
             return roles.Contains(role, StringComparer.OrdinalIgnoreCase);
         }
 
@@ -344,7 +700,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                                   ?? userBusinesses.First();
             }
 
-            var roles = await _userManager.GetRolesAsync(user);
+            var roles = await _context.UserRoles
+                .Where(userRole => userRole.UserId == user.Id &&
+                                   userRole.BusinessId == activeBusiness.BusinessId &&
+                                   userRole.IsActive)
+                .Select(userRole => userRole.Role.Name!)
+                .Distinct()
+                .ToListAsync();
 
             var organizations = await (from uo in _context.UserOrganizations
                                        join bo in _context.Organizations
@@ -1079,10 +1441,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<CreateUserResult> RegisterUser(
         OnboardingRequestModel model, OnBoardingArgs args)
         {
-            
-            var role = await GetRoleAsync(args.userType);
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                throw new BaseException(ExceptionType.ACCESS_DENIED, "Business context is required.");
 
-           
+            var businessId = await _context.Businesses
+                .Where(business => business.BusinessCode == args.businessCode)
+                .Select(business => (long?)business.BusinessId)
+                .FirstOrDefaultAsync();
+            if (businessId is null)
+                throw new BaseException(ExceptionType.ACCESS_DENIED, "Invalid business.");
+
+            var role = await GetRoleAsync(args.userType);
+            if (role.BusinessId is not null && role.BusinessId != businessId.Value)
+                throw new BaseException(ExceptionType.ACCESS_DENIED, "Role is not available for this business.");
 
             var lookup = await FindExistingUserAsync(model);
 
@@ -1112,7 +1483,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return await HandleExistingUser(user, model, args, role);
         }
      
-        public async Task<IdentityRole> GetRoleAsync(string roleName)
+        public async Task<Role> GetRoleAsync(string roleName)
         {
             var role = await _roleManager.FindByNameAsync(roleName);
 
@@ -1205,7 +1576,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         User user,
         OnboardingRequestModel model,
         OnBoardingArgs args,
-        IdentityRole role)
+        Role role)
         {
      
             if (!string.IsNullOrEmpty(model.DateOfBirth) && user.DateOfBirth != model.DateOfBirth)
@@ -1290,7 +1661,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var identityRoles = await (
                 from ur in _context.UserRoles
                 join r in _context.Roles on ur.RoleId equals r.Id
-                where ur.UserId == user.Id
+                where ur.UserId == user.Id &&
+                      ur.BusinessId == business.BusinessId &&
+                      ur.IsActive
                 select r.Name
             ).ToListAsync();
 
@@ -1350,29 +1723,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
 
-            bool hasIdentityRole = identityRoles.Contains(role.Name);
-             bool isNewRoleForUser = !hasIdentityRole;
+            var roleAssignment = await _context.UserRoles.FirstOrDefaultAsync(userRole =>
+                userRole.UserId == user.Id &&
+                userRole.RoleId == role.Id &&
+                userRole.BusinessId == business.BusinessId);
+            var hasIdentityRole = roleAssignment?.IsActive == true;
+            var isNewRoleForUser = !hasIdentityRole;
 
-
-
-
-            if (!hasIdentityRole)
+            if (roleAssignment is null)
             {
-                var roleResult = await _userManager.AddToRoleAsync(user, role.Name);
-
-                if (!roleResult.Succeeded)
+                _context.UserRoles.Add(new ApplicationUserRole
                 {
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
-
-                    //return new CreateUserResult
-                    //{
-                    //    model = model,
-                    //    status = false,
-                    //    IsExisting = true,
-                    //    message = string.Join(", ", roleResult.Errors.Select(e => e.Description)),
-                    //    ShouldLogin = !requiresProfileCompletion
-                    //};
-                }
+                    UserId = user.Id,
+                    RoleId = role.Id,
+                    BusinessId = business.BusinessId,
+                    IsActive = true
+                });
+            }
+            else
+            {
+                roleAssignment.IsActive = true;
             }
 
             var newMembership = new UserBusiness
@@ -1441,7 +1811,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<CreateUserResult> CreateNewUser(
         OnboardingRequestModel model,
         OnBoardingArgs args,
-        IdentityRole role)
+        Role role)
         {
             var salt = EncryptionUtil.GetSalt();
             model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)

@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models;
+using Agrovesto.Backend.Core.Models.Admin;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Common;
@@ -66,6 +67,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         Task<FarmerProfileDto> GetFarmerProfile(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
+        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent);
+        Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
         Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode);
         Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
@@ -637,6 +640,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return login;
         }
+
+        public Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
+            => _onboardingRepository.AdminLogin(model, businessCode, ipAddress, userAgent);
+
+        public Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null)
+            => _onboardingRepository.RefreshToken(refreshToken, ipAddress);
+
         public async Task<(bool Status, string Message)> Logout(ClaimsPrincipal userPrincipal)
         {
             var jti = userPrincipal.FindFirstValue(JwtRegisteredClaimNames.Jti);
@@ -647,8 +657,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 return (false, "Invalid token");
 
             var expiry = DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim)).UtcDateTime;
+            var sessionId = userPrincipal.FindFirstValue("SessionId");
 
-            await _onboardingRepository.RevokeAsync(jti, userId!, expiry);
+            await _onboardingRepository.LogoutAsync(userId: userId!, jti: jti, tokenExpiry: expiry, sessionId: sessionId);
 
             return (true, "Logged out successfully");
         }
