@@ -12,6 +12,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class CreateMembershipDto
     {
         [Required]
+        [MaxLength(50, ErrorMessage = "Name cannot exceed 50 characters.")]
         public string Name { get; set; }
 
         [Required]
@@ -24,6 +25,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Ward { get; set; }
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
+        [MaxLength(11, ErrorMessage = "Phone number cannot exceed 11 characters.")]
         public string? PhoneNumber { get; set; }
         public string? DateOfBirth  { get; set; }
         public SignupMethod SignupMethod = SignupMethod.PhoneNumber;

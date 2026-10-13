@@ -85,6 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         farmerCooperative.IsActive = false;
                         farmerCooperative.DeactivationReason = reason;
                         farmerCooperative.DeactivatedByUserId = deactivatedByUserId;
+                        
                         farmerCooperative.DeactivatedOn = DateTimeOffset.Now;
                         break;
                     }
@@ -994,6 +995,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 if (data.MemberShipTypeId == 0) data.MemberShipTypeId = DefaultMembershipTypeId;
 
                 entity = data.Map();
+                entity.BelongToBusinessCode = data.BelongToBusinessCode;
                 _context.MemberShips.Add(entity);
             }
             else

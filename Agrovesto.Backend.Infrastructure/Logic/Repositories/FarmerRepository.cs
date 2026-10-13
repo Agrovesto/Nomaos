@@ -177,10 +177,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                 try
                 {
-                    var farmerExists = await _context.Farmers
-                        .AnyAsync(f => f.Id == args.Id);
-
-                    if (!farmerExists)
+                    var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.Id == args.Id);
+                    if (farmer == null)
                         return false;
 
                     var now = DateTimeOffset.UtcNow;
@@ -229,7 +227,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         membership.DeactivatedByUserId = args.OnboardedByUserId;
                         membership.DeactivationReason = reason;
                     }
-
+                 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -542,25 +540,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 if (user.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed)
                     user.FarmerOnboardingStatus = FarmerOnboardingStatus.Completed;
 
-                if (!string.IsNullOrWhiteSpace(user.NIN) || !string.IsNullOrWhiteSpace(user.BVN))
-                {
-                    var sub = await _context.SubAccounts.FirstOrDefaultAsync(s => s.UserId == farmer.UserId);
-                    if (sub == null)
-                    {
-                        _context.SubAccounts.Add(new SubAccount
-                        {
-                            UserId = farmer.UserId,
-                            NIN = user.NIN,
-                            Bvn = user.BVN,
-                            CreatedOn = DateTimeOffset.UtcNow
-                        });
-                    }
-                    else
-                    {
-                        if (!string.IsNullOrWhiteSpace(user.NIN) && sub.NIN != user.NIN) sub.NIN = user.NIN;
-                        if (!string.IsNullOrWhiteSpace(user.BVN) && sub.Bvn != user.BVN) sub.Bvn = user.BVN;
-                    }
-                }
+                //if (!string.IsNullOrWhiteSpace(user.NIN) || !string.IsNullOrWhiteSpace(user.BVN))
+                //{
+                //    var sub = await _context.SubAccounts.FirstOrDefaultAsync(s => s.UserId == farmer.UserId);
+                //    if (sub == null)
+                //    {
+                //        _context.SubAccounts.Add(new SubAccount
+                //        {
+                //            UserId = farmer.UserId,
+                //            NIN = user.NIN,
+                //            Bvn = user.BVN,
+                //            CreatedOn = DateTimeOffset.UtcNow
+                //        });
+                //    }
+                //    else
+                //    {
+                //        if (!string.IsNullOrWhiteSpace(user.NIN) && sub.NIN != user.NIN) sub.NIN = user.NIN;
+                //        if (!string.IsNullOrWhiteSpace(user.BVN) && sub.Bvn != user.BVN) sub.Bvn = user.BVN;
+                //    }
+                //}
             }
 
             await _context.SaveChangesAsync(); // single save; tracked entities need no explicit Update()
@@ -1594,8 +1592,9 @@ WHERE f.UserId = @userId
                     EF.Functions.Like(f.Ward, pattern) ||
                     EF.Functions.Like(f.Location, pattern) ||
                     EF.Functions.Like(f.PhoneNumber, pattern) ||
-                    EF.Functions.Like(f.Email, pattern) ||
-                    EF.Functions.Like(f.Level, pattern)
+                    EF.Functions.Like(f.Email, pattern) 
+                    //||
+                    //EF.Functions.Like(f.Level, pattern)
                     );
             }
             return queryable;

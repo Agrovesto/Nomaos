@@ -35,6 +35,7 @@ using Hangfire;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.VisualBasic;
 using PhoneNumbers;
 using StackExchange.Redis;
@@ -106,6 +107,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
     public class InputFinancingManager : IInputFinancingManager
     {
+        private readonly ILogger<InputFinancingManager> _logger;
         private readonly IUserWalletRepository _userWalletRepository;
         private readonly IBusinessRepository _businessRepository;
         private readonly IInputFinancingRepository _inputFinancingRepository;
@@ -133,9 +135,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             DataContext context, IMTNMomo mtnMomoService,
             IAWSRekognitionManager imageRecognitionService,
             IUserWalletRepository walletTransactionRepository,
-            IFarmerRepository farmerRepository
+            IFarmerRepository farmerRepository,
+            ILogger<InputFinancingManager> logger   
 )
-        {
+        { 
+
+            _logger = logger;
             _walletTransactionRepository = walletTransactionRepository;
             _userWalletRepository = userWalletRepository;
             _providerRepo = providerRepo;
@@ -890,6 +895,13 @@ RepaymentFrequency frequency)
 
             var requestProvider = await _providerRepo.GetById(request.WalletProviderId);
 
+            _logger.LogInformation(
+   "Commitment check: End={End}, Now={Now}, Expired={Expired}, SubscriptionId={Id}",
+   subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate,
+   DateTimeOffset.UtcNow,
+   subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate < DateTimeOffset.UtcNow,
+   subscription.Id);
+
             ValidateSubscription(subscription, request, configredProvider, requestProvider);
 
             var amountToPay = await CalculateAmountToPayAsync(request, subscription);
@@ -929,12 +941,13 @@ RepaymentFrequency frequency)
                     x.SubscriberUserId == args.SubscriberUserId);
         }
 
-        private static async Task ValidateSubscription(
+        private static void ValidateSubscription(
             InputPackageSubscription subscription,
             RecordCommitmentPaymentRequest request, WalletProviderModel configuredProvider, WalletProviderModel requestProvider)
         {
-            
-            if(configuredProvider == null)
+           
+
+            if (configuredProvider == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Configured package wallet provider not found");
             if(requestProvider == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Request wallet provider not found");
@@ -952,8 +965,11 @@ RepaymentFrequency frequency)
             if (subscription.InputPackage.CommitmentPlan == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment plan not found for this input package");
 
-            if (subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate < DateTimeOffset.UtcNow)
+            var end = subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate;
+       
+            if (end.HasValue && end.Value < DateTimeOffset.UtcNow)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment Payment cut off window has expired, you can no longer make commitmen fee, reach out to your admin");
+
 
 
             if (subscription.Status == SubscriptionStatus.PendingApproval)

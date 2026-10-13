@@ -8,7 +8,9 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Google;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,14 +26,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IOnboardingRepository _onboardingRepository;
         private readonly IOtpService _otpService;
         private readonly INotificationService _smsService;
-
+        private readonly TimeSpan _tokenLifespan;
         public PinChangeHandler(DataContext context,
-            IOnboardingRepository onboardingRepository, IOtpService otpService, INotificationService smsService)
+            IOnboardingRepository onboardingRepository, IOtpService otpService, INotificationService smsService,
+            IOptions<DataProtectionTokenProviderOptions> tokenOptions)
         {
             _context = context;
             _otpService = otpService;
             _smsService = smsService;
             _onboardingRepository = onboardingRepository;
+            _tokenLifespan = tokenOptions.Value.TokenLifespan;
         }
         public CredentialType Type => CredentialType.Pin;
         public string RequiredFieldMissingMessage => "Your current PIN is required.";
@@ -70,7 +74,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 Target = OtpTarget.Phone,
                 Destination = user.PhoneNumber,
                 Purpose = OtpPurpose.PhoneNumberPinReset,
-                ExpiryMinutes = 5
+                ExpiryMinutes = (int)_tokenLifespan.TotalMinutes
             });
 
             return new ResetArtifact { Value = otp.Code, ExpiresAt = otp.ExpiresAt };
@@ -80,14 +84,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             await _smsService.SendSmsAsync(
                 user.PhoneNumber,
-                $"Your verification code is {artifact.Value}. Expires in 5 minutes.",
+                $"Your verification code is {artifact.Value}. Expires in {FormatDuration(_tokenLifespan)}.",
                 model.BusinessCode);
         }
 
         public string BuildNonLiveMessage(ResetArtifact artifact)
-        => $"Your verification code is {artifact.Value}. Expires in 5 minutes.";
+        => $"Your verification code is {artifact.Value}. Expires in {FormatDuration(_tokenLifespan)}.";
 
-
+        private static string FormatDuration(TimeSpan span)
+        {
+            if (span.TotalDays >= 1 && span.TotalDays % 1 == 0)
+                return $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")}";
+            if (span.TotalHours >= 1 && span.TotalHours % 1 == 0)
+                return $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")}";
+            var minutes = (int)Math.Ceiling(span.TotalMinutes);
+            return $"{minutes} minute{(minutes == 1 ? "" : "s")}";
+        }
         public async Task ConfirmAsync(User user, ConfirmCredentialResetModel model)
         {
             if (string.IsNullOrWhiteSpace(model.Code))

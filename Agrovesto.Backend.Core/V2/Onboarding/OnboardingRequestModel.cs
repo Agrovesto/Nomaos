@@ -228,20 +228,28 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Env { get; set; }
+        [MaxLength(50, ErrorMessage = "FullName cannot exceed 50 characters.")]
         public string? FullName { get; set; }
         public string? LogDescription { get; set; }
         public string? ActivityName { get; set; }
         public string? Id { get; set; }
+        [MaxLength(11, ErrorMessage = "PhoneNumber cannot exceed 15 characters.")]
         public string? PhoneNumber { get; set; }
        [MaxLength(15, ErrorMessage = "LastName cannot exceed 15 characters.")]
         public string? LastName { get; set; }
+        [MaxLength(15, ErrorMessage = "FirstName cannot exceed 15 characters.")]
         public string? FirstName { get; set; }
+        [MaxLength(15, ErrorMessage = "MiddleName cannot exceed 15 characters.")]
         public string? MiddleName { get; set; }
         public string? Pin { get; set; }
+        public string? Gender { get; set; }
         public string? DefaultPin { get; set; }
         public string? Password { get; set; }
         public string? DefaultPassword { get; set; }
+
+        [RegularExpression(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", ErrorMessage = "Invalid email format.")]
         public string? Email { get; set; }
+       
         public string? Bvn { get; set; }
         public string? Nin { get; set; }
         public string? DateOfBirth { get; set; }

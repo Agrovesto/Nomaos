@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,10 +19,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public bool IsLeaderAFarmer { get; set; }
         public long MemberShipTypeId { get; set; }
+        [MaxLength(50, ErrorMessage = "Name cannot exceed 50 characters.")]
         public string Name { get; set; }
         public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Password { get; set; }
         public string? RegistrationNumber { get; set; }
+        public string? Gender { get; set; }
         public string? Pin { get; set; }
         public string Location { get; set; }
         public string State { get; set; }
@@ -31,9 +34,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public long OrganizationId { get; set; }
+        [MaxLength(11, ErrorMessage = "Phone number cannot exceed 11 characters.")]
         public string? PhoneNumber { get; set; }
+        [MaxLength(15, ErrorMessage = "FirstName cannot exceed 15 characters.")]
         public string? MembershipLeaderFirstName { get; set; }
+        [MaxLength(15, ErrorMessage = "MiddleName cannot exceed 15 characters.")]
         public string? MembershipLeaderMiddleName { get; set; }
+        [MaxLength(15, ErrorMessage = "LastName cannot exceed 15 characters.")]
         public string? MembershipLeaderLastName { get; set; }
         public string? MembershipLeaderGender { get; set; }
     }
@@ -78,20 +85,20 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         public bool IsLeaderAFarmer { get; set; }
         public long MemberShipTypeId { get; set; }
-        public string Name { get; set; }
+        public string? Name { get; set; }
         public string? Password { get; set; }
         public string? Pin { get; set; }
         public string? MembershipType { get; set; }
         public string? RegistrationNumber { get; set; }
-        public string Location { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
         public string? Ward { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
-        public string ContactPerson { get; set; }
-        public string Email { get; set; }
-        public string PhoneNumber { get; set; }
+        public string? ContactPerson { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
         public string UserId { get; set; }
         public long Id { get; set; }
         public string BelongToBusinessCode { get; set; }  //which business

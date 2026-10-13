@@ -3,8 +3,10 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Google;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System;
@@ -19,11 +21,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
     {
         private readonly IEnumerable<ICredentialChangeHandler> _handlers;
         private readonly IConfiguration _configuration;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
+        private readonly IRateLimitService _rateLimitService;
         public CredentialChangeService(IEnumerable<ICredentialChangeHandler> handlers,
-            IConfiguration configuration)
+            IConfiguration configuration, IRateLimitService rateLimitService,
+        IHttpContextAccessor httpContextAccessor)
         {
             _handlers = handlers;
+            _rateLimitService = rateLimitService;
 
+            _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
         }
 
@@ -53,34 +61,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             return (true, $"{(model.Type == CredentialType.Password ? "Password" : "Pin")} changed successfully");
         }
 
-        public async Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model)
-        {
-            //if (string.IsNullOrWhiteSpace(model.Env))
-            //    throw new BaseException(ExceptionType.BAD_REQUEST, "Environment is required.");
+       // public async Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model)
+       // {
+       //     //if (string.IsNullOrWhiteSpace(model.Env))
+       //     //    throw new BaseException(ExceptionType.BAD_REQUEST, "Environment is required.");
+
+       //     var identifier = (model.Email ?? model.PhoneNumber ?? string.Empty)
+       //.Trim()
+       //.ToLowerInvariant();
+
+       //     if (string.IsNullOrEmpty(identifier))
+       //         throw new BaseException(ExceptionType.BAD_REQUEST, "Email or phone number is required.");
+
+       //     // per-account limit (include Type so password/PIN resets don't share a bucket)
+       //     await _rateLimitService.IsRateLimitedAsync($"{model.Type}:{identifier}",
+       //         RateLimitType.FORGOT_CREDENTIAL);
+
+       //     // per-IP limit
+       //     var ip = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+       //     if (!string.IsNullOrEmpty(ip))
+       //         await _rateLimitService.IsRateLimitedAsync(ip, RateLimitType.FORGOT_CREDENTIAL_IP);
 
 
-            var env = _configuration["Official:Env"];
+       //     var env = _configuration["Official:Env"];
 
-            var handler = _handlers.SingleOrDefault(h => h.Type == model.Type)
-                ?? throw new BaseException(ExceptionType.BAD_REQUEST, "Unsupported credential type.");
+       //     var handler = _handlers.SingleOrDefault(h => h.Type == model.Type)
+       //         ?? throw new BaseException(ExceptionType.BAD_REQUEST, "Unsupported credential type.");
 
-            var user = await handler.FindUserAsync(new ChangeCredentialModel
-            {
-                Email=model.Email,
-                PhoneNumber=model.PhoneNumber,
-            });
-            var artifact = await handler.GenerateArtifactAsync(user, model);
+       //     var user = await handler.FindUserAsync(new ChangeCredentialModel
+       //     {
+       //         Email=model.Email,
+       //         PhoneNumber=model.PhoneNumber,
+       //     });
+       //     var artifact = await handler.GenerateArtifactAsync(user, model);
 
           
-            if (env == Env.Live.ToString())
-            {
-                await handler.DeliverLiveAsync(user, artifact, model);
-                return (true, "A reset code has been sent");
-            }
+       //     if (env == Env.Live.ToString())
+       //     {
+       //         await handler.DeliverLiveAsync(user, artifact, model);
+       //         return (true, "A reset code has been sent");
+       //     }
 
 
-             return (true, handler.BuildNonLiveMessage(artifact));
-        }
+       //      return (true, handler.BuildNonLiveMessage(artifact));
+       // }
 
         public async Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model)
         {
@@ -103,6 +127,79 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             await handler.ConfirmAsync(user, model);
 
             return (true, $"{(model.Type == CredentialType.Password ? "Password" : "Pin")} reset successful");
+        }
+
+        public async Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model)
+        {
+            var identifier = GetIdentifier(model);
+
+            await _rateLimitService.IsRateLimitedAsync($"{model.Type}:{identifier}",
+                RateLimitType.FORGOT_CREDENTIAL);
+            await CheckIpLimitAsync(RateLimitType.FORGOT_CREDENTIAL_IP);
+
+            return await IssueAndDeliverAsync(model);
+        }
+
+        public async Task<(bool Status, string Message)> ResendCredentialAsync(ForgotCredentialModel model)
+        {
+            var identifier = GetIdentifier(model);
+            var key = $"resend:{model.Type}:{identifier}";
+
+            // 1. cooldown: stops rapid-fire clicking
+            await _rateLimitService.IsRateLimitedAsync(key, RateLimitType.RESEND_CREDENTIAL_COOLDOWN);
+            // 2. cap: max resends in the window
+            await _rateLimitService.IsRateLimitedAsync(key, RateLimitType.RESEND_CREDENTIAL);
+            // 3. per-IP
+            await CheckIpLimitAsync(RateLimitType.RESEND_CREDENTIAL_IP);
+
+            var (status, message) = await IssueAndDeliverAsync(model);
+            return (status, status && message == "A reset code has been sent"
+                ? "A new reset code has been sent"
+                : message);
+        }
+
+        private string GetIdentifier(ForgotCredentialModel model)
+        {
+            var identifier = (model.Email ?? model.PhoneNumber ?? string.Empty)
+                .Trim()
+                .ToLowerInvariant();
+
+            if (string.IsNullOrEmpty(identifier))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Email or phone number is required.");
+
+            return identifier;
+        }
+
+        private async Task CheckIpLimitAsync(RateLimitType type)
+        {
+            var ip = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            if (!string.IsNullOrEmpty(ip))
+                await _rateLimitService.IsRateLimitedAsync(ip, type);
+        }
+
+        private async Task<(bool Status, string Message)> IssueAndDeliverAsync(ForgotCredentialModel model)
+        {
+            var env = _configuration["Official:Env"];
+
+            var handler = _handlers.SingleOrDefault(h => h.Type == model.Type)
+                ?? throw new BaseException(ExceptionType.BAD_REQUEST, "Unsupported credential type.");
+
+            var user = await handler.FindUserAsync(new ChangeCredentialModel
+            {
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+            });
+
+            // For PIN: GenerateOtpAsync invalidates any active OTP, so the old code stops working
+            var artifact = await handler.GenerateArtifactAsync(user, model);
+
+            if (env == Env.Live.ToString())
+            {
+                await handler.DeliverLiveAsync(user, artifact, model);
+                return (true, "A reset code has been sent");
+            }
+
+            return (true, handler.BuildNonLiveMessage(artifact));
         }
     }
 

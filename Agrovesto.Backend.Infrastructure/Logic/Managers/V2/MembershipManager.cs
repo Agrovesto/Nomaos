@@ -163,7 +163,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     MiddleName = model.MiddleName,
                     LastName = model.LastName,
                     DateOfBirth = model.DateOfBirth,
-                    SignupMethod=model.SignupMethod
+                    SignupMethod=model.SignupMethod,
+                    Gender=model.Gender
                 }, args);
 
             if (!result.status)
@@ -320,27 +321,27 @@ DateTimeOffset dateTime)
             }
         }
 
-        private async Task RunNonCriticalSteps(
- CreateFarmerRequest model,
- OnBoardingArgs args,
- BusinessModel business,
-OnboardingRequestModel user,
- DateTimeOffset dateTime)
-        {
-            try
-            {
-                await LogActivity(user, args);
-                await EnsureWalletExists(user, business);
-                     await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await GenerateAndSendOtp(user);
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning(ex,
-                    $"Non-critical onboarding step failed for user {user.Id}. " +
-                    "User can continue and complete setup later.");
-            }
-        }
+//        private async Task RunNonCriticalSteps(
+// CreateFarmerRequest model,
+// OnBoardingArgs args,
+// BusinessModel business,
+//OnboardingRequestModel user,
+// DateTimeOffset dateTime)
+//        {
+//            try
+//            {
+//                await LogActivity(user, args);
+//                await EnsureWalletExists(user, business);
+//                     await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
+//                await GenerateAndSendOtp(user);
+//            }
+//            catch (Exception ex)
+//            {
+//                _log.LogWarning(ex,
+//                    $"Non-critical onboarding step failed for user {user.Id}. " +
+//                    "User can continue and complete setup later.");
+//            }
+//        }
        
         public async Task<CreateMembershipResponseModel> CreateFarmerAsync(
      CreateFarmerRequest model,
@@ -364,8 +365,8 @@ OnboardingRequestModel user,
                 model.Id = farmer.data.Id;
                 user.model.LogDescription = $"Added  Farmer {model.FirstName} {model.MiddleName} {model.LastName}";
                 user.model.ActivityName = $"New Farmer Added";
-                await RunNonCriticalSteps(
-                    model, args, business, user.model, dateTime);
+                //await RunNonCriticalSteps(
+                //    model, args, business, user.model, dateTime);
 
                 return new CreateMembershipResponseModel
                 {

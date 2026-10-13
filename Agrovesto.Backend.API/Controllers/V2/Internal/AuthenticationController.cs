@@ -206,7 +206,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("resend-otp")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
-        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
+        //Todo:rework to remove usertype
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] VerificationArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -433,6 +434,24 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             };
 
             var (status, message) = await _onBoardingManager.ForgotCredential(model);
+            return Ok(new { status, message });
+        }
+        [HttpPost("resend-credential")]
+        [AllowPendingCredentialChange]
+        public async Task<IActionResult> ResendCredential([FromBody] ForgotCredentialRequest request,
+            [FromQuery] string businessCode,
+            [FromQuery] string env)
+        {
+            var model = new ForgotCredentialModel
+            {
+                Type = request.Type,
+                Email = request.Email,
+                PhoneNumber = request.PhoneNumber,
+                BusinessCode = businessCode,
+                Env = env
+            };
+
+            var (status, message) = await _onBoardingManager.ResendCredentialAsync(model);
             return Ok(new { status, message });
         }
         [HttpPost("reset-credential")]
