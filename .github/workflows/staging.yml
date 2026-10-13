@@ -161,7 +161,7 @@ jobs:
         id: instance
         run: |
           IDS=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=${APP_NAME}-${TARGET_ENV}" \
+            --filters "Name=tag:Name,Values=agrovesto-dev-os-apps" \
                       "Name=instance-state-name,Values=running" \
             --query "Reservations[].Instances[].InstanceId" --output text)
           COUNT=$(echo "$IDS" | wc -w)
