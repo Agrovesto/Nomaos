@@ -44,6 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
     public class Farmer
     {
         public string BelongToBusinessCode { get; set; }  //which business
+        [StringLength(50)]
         public string? Name { get; set; }
         public string? Location { get; set; }
         public string? State { get; set; }

@@ -24,10 +24,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public string? OnboardedByUserId { get; set; }
         public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
+        [MaxLength(11, ErrorMessage = "Phone number cannot exceed 11 characters.")]
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
+        [MaxLength(15, ErrorMessage = "FirstName cannot exceed 15 characters.")]
         public string? FirstName { get; set; }
+        [MaxLength(15, ErrorMessage = "MiddleName cannot exceed 15 characters.")]
         public string? MiddleName { get; set; }
+        [MaxLength(15, ErrorMessage = "LastName cannot exceed 15 characters.")]
         public string? LastName { get; set; }
         public string? Location { get; set; }
         public string? State { get; set; }

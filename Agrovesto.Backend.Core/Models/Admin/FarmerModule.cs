@@ -1,6 +1,8 @@
 ﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Models.Businesses;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,7 +21,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public string? OrganizationCode { get; set; }
         public DateTimeOffset? From { get; set; }
         public DateTimeOffset? To { get; set; }
-        public int Page { get; set; } = 1;
+        public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 20;
     }
 
@@ -35,7 +37,6 @@ namespace Agrovesto.Backend.Core.Models.Admin
 
     public class FarmerListItemDto
     {
-        public int SerialNo { get; set; }
         public long Id { get; set; }
         public string FarmerId { get; set; } = default!;   // FMR-1712
         public string? FullName { get; set; }
@@ -45,6 +46,8 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public int Farms { get; set; }
         public string? AssignedAgent { get; set; }
         public string? Organization { get; set; }
+        public string? OrganizationCode { get; set; }
+        public string? AgentUserId { get; set; }
     }
 
     public class FarmerDetailsDto
@@ -163,5 +166,38 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public decimal Value { get; set; }
         public string Status { get; set; } = default!;   // Active / Completed / Pending
         public DateTimeOffset? ApprovedDate { get; set; }
+    }
+
+
+    public class AdminCreateFarmerRequest
+    {
+        public string? Bvn { get; set; }
+        public string? NIN { get; set; }
+        [MaxLength(15, ErrorMessage = "FirstName cannot exceed 15 characters.")]
+        public string? FirstName { get; set; }
+        [MaxLength(15, ErrorMessage = "MiddleName cannot exceed 15 characters.")]
+        public string? MiddleName { get; set; }
+        [MaxLength(15, ErrorMessage = "LastName cannot exceed 15 characters.")]
+        public string? LastName { get; set; }
+        public string? Gender { get; set; }
+        public string? DateOfBirth { get; set; }
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
+        [MaxLength(11, ErrorMessage = "Phone number cannot exceed 11 characters.")]
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
+        public string? Ward { get; set; }           
+        public string? FarmerCategory { get; set; }
+        public List<ValueChainSelectionDto>? ValueChain { get; set; }
+
+        public long YearsInAgric { get; set; }
+
+        public string? HighestLevelOfEducation { get; set; }
+        public List<long?>? AgentIds { get; set; }
+        public List<string?>? OrganizationCode { get; set; }
+      
+        public List<long?>? CooperativeIds { get; set; }
     }
 }

@@ -173,6 +173,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.BAD_REQUEST,
                     string.IsNullOrWhiteSpace(reason) ? "Invalid or expired reset link." : reason);
             }
+
+            user.Password = model.NewValue;
+            _context.SaveChangesAsync();
         }
 
     }

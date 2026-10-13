@@ -1,9 +1,14 @@
 ﻿
 using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Admin;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
@@ -34,7 +39,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         }
 
         private static readonly Expression<Func<Farmer, bool>> IsVerified =
-          f => f.User.IsPhoneVerified;
+          f => (f.User.IsPhoneVerified && f.User.IsNinVerified);
 
         // ---------- Cards ----------
         public async Task<FarmerSummaryDto> GetSummaryAsync(long businessId)
@@ -71,6 +76,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 q = q.Where(f =>
                     (f.Name != null && f.Name.Contains(s)) ||
                     (f.PhoneNumber != null && f.PhoneNumber.Contains(s)) ||
+                    (f.UserId != null && f.UserId.Contains(s)) ||
                     (idMatch > 0 && f.Id == idMatch));
             }
 
@@ -94,7 +100,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         
         public async Task<PagedResult<FarmerListItemDto>> GetFarmersAsync(FarmerListQuery p)
         {
-            var page = Math.Max(p.Page, 1);
+            var page = Math.Max(p.PageNumber, 1);
             var size = Math.Clamp(p.PageSize, 1, 100);
 
             var q = ApplyFilters(FarmersInBusiness(p.BusinessId), p);
@@ -105,12 +111,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .ThenByDescending(f => f.Id)
                 .Skip((page - 1) * size)
                 .Take(size)
-                .Select(f => new { f.Id, f.Name, f.PhoneNumber, f.OnBoardedOn, f.FarmerStatus })
+                .Select(f => new { f.Id, f.Name, f.PhoneNumber, f.OnBoardedOn, f.FarmerStatus, f.UserId })
                 .ToListAsync();
 
             var ids = rows.Select(r => r.Id).ToList();
 
-            // Related data for this page only (3 small queries instead of N+1)
             var farmCounts = await _context.Farms
                 .Where(x => ids.Contains(x.FarmerId))
                 .GroupBy(x => x.FarmerId)
@@ -120,27 +125,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             var orgs = (await (from fo in _context.FarmerOrganizations
                                join o in _context.Organizations on fo.OrganizationCode equals o.OrganizationCode
                                where ids.Contains(fo.FarmerId) && fo.IsActive
-                               select new { fo.FarmerId, o.CompanyName }).ToListAsync())
-                       .ToLookup(x => x.FarmerId, x => x.CompanyName);
+                               select new { fo.FarmerId, o.CompanyName, o.OrganizationCode }).ToListAsync())
+             .ToLookup(x => x.FarmerId);
 
             var agents = (await _context.FarmerAgents
                             .Where(x => ids.Contains(x.FarmerId) && x.IsActive)
-                            .Select(x => new { x.FarmerId, AgentName = x.Agent.Name })
+                            .Select(x => new { x.FarmerId, AgentName = x.Agent.Name, AgentUserId = x.Agent.UserId })
                             .ToListAsync())
-                         .ToLookup(x => x.FarmerId, x => x.AgentName);
+                         .ToLookup(x => x.FarmerId);
 
-            var items = rows.Select((r, i) => new FarmerListItemDto
+            var items = rows.Select(r => new FarmerListItemDto
             {
-                SerialNo = (page - 1) * size + i + 1,
                 Id = r.Id,
-                FarmerId = $"FMR-{r.Id}",
+                FarmerId = r.UserId,
                 FullName = r.Name,
                 PhoneNumber = r.PhoneNumber,
                 RegDate = r.OnBoardedOn,
-                Status = r.FarmerStatus.ToString(),
+                Status = EnumExtensions.GetDisplayName(r.FarmerStatus),
                 Farms = farmCounts.GetValueOrDefault(r.Id),
-                AssignedAgent = string.Join(", ", agents[r.Id].Distinct()),
-                Organization = string.Join(", ", orgs[r.Id].Distinct())
+
+                AssignedAgent = string.Join(", ", agents[r.Id].Select(a => a.AgentName).Distinct()),
+                AgentUserId = string.Join(", ", agents[r.Id].Select(a => a.AgentUserId).Distinct()),
+
+                Organization = string.Join(", ", orgs[r.Id].Select(o => o.CompanyName).Distinct()),
+                OrganizationCode = string.Join(", ", orgs[r.Id].Select(o => o.OrganizationCode).Distinct()),
             }).ToList();
 
             return new PagedResult<FarmerListItemDto>(items, total, page, size);
@@ -149,13 +157,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         // ---------- Export: same filters, no paging ----------
         public async Task<List<FarmerListItemDto>> GetAllForExportAsync(FarmerListQuery p)
         {
-            p.Page = 1;
+            p.PageNumber = 1;
             p.PageSize = int.MaxValue;
             // Reuse the table logic without the 100-row clamp:
             var q = ApplyFilters(FarmersInBusiness(p.BusinessId), p);
 
             var rows = await q.OrderByDescending(f => f.OnBoardedOn)
-                .Select(f => new { f.Id, f.Name, f.PhoneNumber, f.OnBoardedOn, f.FarmerStatus })
+                .Select(f => new { f.Id, f.Name, f.PhoneNumber, f.OnBoardedOn, f.FarmerStatus, f.UserId })
                 .ToListAsync();
 
             var ids = rows.Select(r => r.Id).ToList();
@@ -180,9 +188,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             return rows.Select((r, i) => new FarmerListItemDto
             {
-                SerialNo = i + 1,
+                //SerialNo = i + 1,
                 Id = r.Id,
-                FarmerId = $"FMR-{r.Id}",
+                FarmerId = r.UserId,
                 FullName = r.Name,
                 PhoneNumber = r.PhoneNumber,
                 RegDate = r.OnBoardedOn,
@@ -213,6 +221,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 select new
                 {
                     f.Id,
+                    f.UserId,
                     f.Name,
                     f.Email,
                     f.PhoneNumber,
@@ -222,7 +231,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     f.State,
                     f.Lga,
                     f.Ward,
-                    f.UserId,
                     f.OnboardedByUserId,
                     f.OnBoardedOn,
                     f.FarmerStatus,
@@ -527,6 +535,280 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             await _context.SaveChangesAsync();
             return true;
+        }
+
+
+
+
+        private async Task<(bool status, FarmerModel data)> CreateFarmerOrFails(
+AdminCreateFarmerRequest model,
+OnBoardingArgs args,
+BusinessModel business,
+string userId,
+DateTimeOffset dateTime)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new ValidationException("Could not find target user");
+
+            if (string.IsNullOrWhiteSpace(model.FirstName))
+                throw new ValidationException("First name is required");
+
+            var fullName = string.Join(" ",
+                new[] { model.FirstName, model.MiddleName, model.LastName }
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            var farmer = new FarmerModel
+            {
+                OnboardedByUserId = args.OnboardedByUserId,
+                BelongToBusinessCode = args.businessCode,
+                Email = model.Email,
+                Gender = model.Gender,
+                State = model.State,
+                Lga = model.Lga,
+                Location = model.Location,
+                Name = fullName,
+                OnBoardedOn = dateTime,
+                PhoneNumber = model.PhoneNumber,
+                UserId = userId,
+                DateOfBirth = model.DateOfBirth,
+
+                CooperativeIds = model.CooperativeIds?
+                    .Where(x => x.HasValue)
+                    .Select(x => x.Value)
+                    .ToList(),
+
+                AgentIds = model.AgentIds?
+                    .Where(x => x.HasValue)
+                    .Select(x => x.Value)
+                    .ToList(),
+
+                Ward = model.Ward,
+             
+                FarmerCategory = model.FarmerCategory,
+                SelectedItems = model.ValueChainDto,
+                YearsInAgric = model.YearsInAgric,
+                Level = FarmerLevel.Level1.ToString(),
+                HighestLevelOfEducation = model.HighestLevelOfEducation,
+
+
+            };
+
+            if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
+            {
+                if (!string.IsNullOrWhiteSpace(model.NIN))
+                    ValidateIdentifier(model.NIN, "NIN");
+
+                if (!string.IsNullOrWhiteSpace(model.Bvn))
+                    ValidateIdentifier(model.Bvn, "BVN");
+
+                await _onboardingRepository.OnNINBVNUpdate(new Core.Models.Common.UserModel
+                {
+                    Id = userId,
+                    Bvn = model.Bvn,
+                    NIN = model.NIN,
+                }, false);
+
+                farmer.Level = FarmerLevel.Level3.ToString();
+                farmer.BVN = model.Bvn;
+                farmer.NIN = model.NIN;
+            }
+
+            var result = await _organizationRepository.CreateOrUpdateFarmer(farmer);
+
+            return result;
+        }
+
+
+
+        public async Task<(bool status, FarmerModel data)> CreateOrUpdateFarmer(AdminCreateFarmerRequest data)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var farmer = await _context.Farmers
+                        .FirstOrDefaultAsync(f => f.UserId == data.UserId);
+
+                    if (farmer == null)
+                    {
+                        farmer = data.Map();
+                        await _context.Farmers.AddAsync(farmer);
+                    }
+                    else
+                    {
+                        await UpdateFarmerProfileAsync(data.UserId, new FarmerUpdateModel
+                        {
+                            Name = data.Name,
+                            PhoneNumber = data.PhoneNumber,
+                            Email = data.Email,
+                            Gender = data.Gender,
+                            State = data.State,
+                            Lga = data.Lga,
+                            Location = data.Location,
+                            Ward = data.Ward,
+                            BVN = data.BVN,
+                            NIN = data.NIN,
+                            FarmerCategory = data.FarmerCategory,
+                            HighestLevelOfEducation = data.HighestLevelOfEducation,
+                            YearsInAgric = data.YearsInAgric,
+                            DateOfBirth = data.DateOfBirth
+                        });
+                    }
+
+                    try
+                    {
+                        await _context.SaveChangesAsync();
+                    }
+                    catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                    {
+                        farmer = await _context.Farmers
+                            .FirstOrDefaultAsync(f => f.UserId == data.UserId);
+                    }
+
+                // ===========================
+                // ORGANIZATION
+                // ===========================
+                if (data.OrganizationCode != null)
+                    {
+                        var exists = await _context.FarmerOrganizations
+                        .Where(x => x.FarmerId == farmer.Id )
+                        .ToListAsync();
+
+
+                        var existingIds = exists.Select(x => x.OrganizationCode).ToHashSet();
+                        var incoming = data.OrganizationCode.ToHashSet();
+
+                        var toAdd = incoming.Where(id => !existingIds.Contains(id));
+                        var toRemove = exists.Where(e => !incoming.Contains(e.OrganizationCode));
+
+                        await _context.FarmerOrganizations.AddRangeAsync(
+                            toAdd.Select(id => new FarmerOrganization
+                            {
+                                FarmerId = farmer.Id,
+                                OrganizationCode = id,
+                                IsActive = true,
+                                OnboardedByUserId = data.OnboardedByUserId,
+                                OnBoardedOn = DateTimeOffset.UtcNow
+                            }));
+
+                        _context.FarmerOrganizations.RemoveRange(toRemove);
+
+                    }
+
+                    // ===========================
+                    // COOPERATIVES (BULK SAFE)
+                    // ===========================
+                    if (data.CooperativeIds != null)
+                    {
+                        var existing = await _context.FarmerCooperatives
+                            .Where(x => x.FarmerId == farmer.Id)
+                            .ToListAsync();
+
+                        var existingIds = existing.Select(x => x.CooperativeId).ToHashSet();
+                        var incoming = data.CooperativeIds.ToHashSet();
+
+                        var toAdd = incoming.Where(id => !existingIds.Contains(id));
+                        var toRemove = existing.Where(e => !incoming.Contains(e.CooperativeId));
+
+                        await _context.FarmerCooperatives.AddRangeAsync(
+                            toAdd.Select(id => new FarmerCooperative
+                            {
+                                FarmerId = farmer.Id,
+                                CooperativeId = id,
+                                IsActive = true,
+                                OnboardedByUserId = data.OnboardedByUserId,
+                                JoinedOn = DateTimeOffset.UtcNow
+                            }));
+
+                        _context.FarmerCooperatives.RemoveRange(toRemove);
+                    }
+
+
+                    if (data.AgentIds != null)
+                    {
+                        var existing = await _context.FarmerAgents
+                            .Where(x => x.FarmerId == farmer.Id)
+                            .ToListAsync();
+
+                        var existingIds = existing.Select(x => x.AgentId).ToHashSet();
+                        var incoming = data.AgentIds.ToHashSet();
+
+                        var toAdd = incoming.Where(id => !existingIds.Contains(id));
+                        var toRemove = existing.Where(e => !incoming.Contains(e.AgentId));
+
+                        await _context.FarmerAgents.AddRangeAsync(
+                            toAdd.Select(id => new FarmerAgent
+                            {
+                                FarmerId = farmer.Id,
+                                AgentId = id,
+                                AssignedByUserId = data.OnboardedByUserId,
+                                AssignedOn = DateTimeOffset.UtcNow,
+                                IsActive = true,
+                            }));
+
+                        _context.FarmerAgents.RemoveRange(toRemove);
+                    }
+
+                    // ===========================
+                    // VALUE CHAIN
+                    // ===========================
+                    if (data.ValueChain != null)
+                    {
+                        await UpdateFarmerValueChainItems(farmer.Id, data.ValueChain);
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return (true, farmer.Map());
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        private async Task UpdateFarmerValueChainItems(long farmerId, List<ValueChainSelectionDto> valueChainSelections)
+        {
+            var existingItems = await _context.FarmerValueChainItems
+                .Where(x => x.FarmerId == farmerId)
+                .ToListAsync();
+
+            var incomingItems = valueChainSelections
+                .SelectMany(v => v.Items.Select(item => new { v.ValueChainType, ItemName = item }))
+                .ToList();
+
+            foreach (var incoming in incomingItems)
+            {
+                bool exists = existingItems.Any(e =>
+                    e.ValueChainType == incoming.ValueChainType &&
+                    e.ItemName == incoming.ItemName);
+
+                if (!exists)
+                {
+                    _context.FarmerValueChainItems.Add(new FarmerValueChainItem
+                    {
+                        FarmerId = farmerId,
+                        ValueChainType = incoming.ValueChainType,
+                        ItemName = incoming.ItemName
+                    });
+                }
+            }
+
+            var toRemove = existingItems
+                .Where(e => !incomingItems.Any(i =>
+                    i.ValueChainType == e.ValueChainType &&
+                    i.ItemName == e.ItemName))
+                .ToList();
+
+            _context.FarmerValueChainItems.RemoveRange(toRemove);
+            await _context.SaveChangesAsync();
         }
 
     }

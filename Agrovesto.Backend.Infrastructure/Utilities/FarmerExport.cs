@@ -19,7 +19,9 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
             sb.AppendLine("S/n,Farmer ID,Full Name,Phone Number,Reg Date,Status,Farms,Assigned Agent,Organization");
             foreach (var r in rows)
                 sb.AppendLine(string.Join(",",
-                    r.SerialNo, Esc(r.FarmerId), Esc(r.FullName), Esc(r.PhoneNumber),
+                    //r.SerialNo,
+                    Esc(r.FarmerId), 
+                    Esc(r.FullName), Esc(r.PhoneNumber),
                     r.RegDate.ToString("dd/MM/yyyy"), Esc(r.Status), r.Farms,
                     Esc(r.AssignedAgent), Esc(r.Organization)));
 
@@ -40,7 +42,7 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
             for (int i = 0; i < rows.Count; i++)
             {
                 var r = rows[i];
-                ws.Cell(i + 2, 1).Value = r.SerialNo;
+                //ws.Cell(i + 2, 1).Value = r.SerialNo;
                 ws.Cell(i + 2, 2).Value = r.FarmerId;
                 ws.Cell(i + 2, 3).Value = r.FullName;
                 ws.Cell(i + 2, 4).Value = r.PhoneNumber;      // string, so leading 0 is kept
