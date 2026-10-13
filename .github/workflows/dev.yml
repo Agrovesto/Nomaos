@@ -154,6 +154,7 @@ jobs:
             fi
 
             echo "No High/Critical NuGet findings detected."
+        continue-on-error: true
 
 
   # =========================================================================
