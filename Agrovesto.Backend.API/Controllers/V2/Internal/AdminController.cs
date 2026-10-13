@@ -433,7 +433,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer suspended." })
                 : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already suspended." });
         }
-
+       
         [HttpGet("farmer/{userId}/farms/summary")]
         public async Task<IActionResult> FarmSummary(string userId)
         {
@@ -466,5 +466,34 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(new Response<FarmerOrgMembershipDto> { Succeeded = true, Data = data });
         }
+
+        [HttpPost("farmer/create")]
+        public async Task<IActionResult> CreateFarmerAsync([FromBody] AdminCreateFarmerRequest model, [FromQuery] AdminOnBoardingArgs args,
+            CancellationToken ct)
+        {
+            args.businessCode = RequireBusinessCode();
+            args.OnboardedByUserId= User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            try
+            {
+                var result = await _farmerManager.CreateFarmerAsync(model, args, ct);
+                return Ok(new Response<(bool, string, string[])> 
+                { 
+                    Succeeded = true, 
+                    Data = result,
+                    Message=result.msg,
+                    Code= result.status ? AdminResponseCodes.Success : AdminResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode((int)ex.HttpStatusCode, new
+                {
+                    status = false,
+                    message = ex.ExceptionMessage,
+                    errors = ex.Errors
+                });
+            }
+        }
+
     }
 }

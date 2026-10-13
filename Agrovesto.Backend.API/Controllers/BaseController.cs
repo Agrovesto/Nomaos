@@ -481,6 +481,24 @@ namespace Agrovesto.Backend.API.Controllers
                 throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
             return id.Value;
         }
+        private string? CurrentBusinessCodeRaw =>
+            TryReadJwt()?
+                .Claims.FirstOrDefault(x => x.Type.Equals("BusinessCode", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+
+        // Typed, nullable: null if the claim is missing or not a valid number
+        public string? CurrentBusinessCode =>
+            CurrentBusinessCodeRaw;
+
+        // For endpoints that can't work without it
+        protected string RequireBusinessCode()
+        {
+            var code = CurrentBusinessCode; 
+
+            if (code is null)
+                throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
+            return code;
+        }
         public string Token
         {
             get

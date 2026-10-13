@@ -1,18 +1,34 @@
 ﻿
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Admin;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Runtime.Internal.Util;
+using DocumentFormat.OpenXml.InkML;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq.Expressions;
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using FarmerPersonalInfoDto = Agrovesto.Backend.Core.Models.Admin.FarmerPersonalInfoDto;
 using FarmerSummaryDto = Agrovesto.Backend.Core.Models.Admin.FarmerSummaryDto;
+using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 {
@@ -27,15 +43,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<FarmSummaryDto?> GetFarmSummaryAsync(long businessId, string farmerUserId);
         Task<PagedResult<FarmListItemDto>?> GetFarmsAsync(long businessId, string farmerUserId, int page = 1, int pageSize = 20);
         Task<FarmerOrgMembershipDto?> GetOrganizationMembershipAsync(long businessId, string farmerUserId);
+        Task<FarmerModel> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update);
+        Task<(bool status, string msg, string?[] errors)> CreateFarmerAsync(AdminCreateFarmerRequest model, AdminOnBoardingArgs args, CancellationToken ct);
     }
     public class AdminFarmerManager : IAdminFarmerManager
     {
+        private readonly IAWSService _email;
+        private readonly IConfiguration _configuration;
+        private readonly IAdminAuditLogger _audit;
         private readonly DataContext _context;
+        private readonly ILogger<AdminFarmerManager> _log;
         private readonly IInputFinanceReader _inputFinance;
-        public AdminFarmerManager(DataContext context, IInputFinanceReader inputFinance)
+        private readonly IBusinessRepository _businessRepository;
+        private readonly IOnboardingRepository _onboardingRepository;
+        private readonly INotificationService _smsService;
+        public AdminFarmerManager(DataContext context, IInputFinanceReader inputFinance, ILogger<AdminFarmerManager> log,
+            IAdminAuditLogger audit,
+            IConfiguration configuration,
+            IAWSService aWSService,
+            INotificationService smsService,
+            IBusinessRepository businessRepository, IOnboardingRepository onboardingRepository)
         {
             _context = context;
             _inputFinance = inputFinance;
+            _log = log;
+            _businessRepository = businessRepository;
+            _onboardingRepository = onboardingRepository;
+            _audit = audit;
+            _configuration = configuration;
+            _email = aWSService;
         }
 
         private static readonly Expression<Func<Farmer, bool>> IsVerified =
@@ -97,7 +133,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             return q;
         }
-        
+
         public async Task<PagedResult<FarmerListItemDto>> GetFarmersAsync(FarmerListQuery p)
         {
             var page = Math.Max(p.PageNumber, 1);
@@ -443,9 +479,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                                     join m in _context.MemberShips on fc.CooperativeId equals m.Id
                                     where fc.FarmerId == farmer.Id
                                     orderby fc.IsActive descending, fc.JoinedOn descending
-                                    select new { m.Name,
+                                    select new
+                                    {
+                                        m.Name,
                                         //fc.Role, 
-                                        fc.JoinedOn, fc.IsActive })
+                                        fc.JoinedOn,
+                                        fc.IsActive
+                                    })
                                    .ToListAsync();
 
             return new FarmerOrgMembershipDto
@@ -471,7 +511,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 {
                     SerialNo = i + 1,
                     Membership = x.Name,
-                   // Role = x.Role,
+                    // Role = x.Role,
                     Joined = x.JoinedOn,
                     Status = x.IsActive
                     //? "Inactive" : x.IsVerified ? "Verified" : "Pending"
@@ -537,15 +577,208 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             return true;
         }
 
+        #region createfarmer
+        public async Task<(bool status, string msg, string?[] errors)> CreateFarmerAsync(
+      AdminCreateFarmerRequest model, AdminOnBoardingArgs args, CancellationToken ct)
+        {
+            try
+            {
+                var correlationId = Guid.NewGuid().ToString();
+                _log.LogInformation("Starting farmer onboarding {CorrelationId}", correlationId);
 
+                // 1. Validate everything up front (throws once with all errors)
+                var business = await ValidateCriticalInputs(model, args);
 
+                // 2. Prepare
+                var dateTime = DateTimeOffset.UtcNow;
+                model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+                    ? SignupMethod.Email : SignupMethod.PhoneNumber;
+                ApplyDefaultCredentials(model);
 
+                // 3. Register user
+                var createUser = await _onboardingRepository.RegisterUser(
+                    BuildUserCreationModel(model),
+                    new OnBoardingArgs { businessCode = args.businessCode, Env = args.Env, userType = args.userType });
+
+                // 4. Create farmer + map cooperatives/agents/organizations/value chain
+                var farmerResult = await CreateFarmerOrFails(
+                    model, args, business, createUser.model.Id, dateTime);
+
+                createUser.model.LogDescription = $"Added Farmer {model.FirstName} {model.LastName}";
+                createUser.model.ActivityName = "New Farmer Added";
+
+                // 5. Audit + credentials notification (non-critical)
+                await RunNonCriticalSteps(model, args, business, createUser.model, dateTime, ct);
+
+                return (farmerResult.status, "Farmer created successfully", Array.Empty<string?>());
+            }
+            catch (BaseException)
+            {
+                throw;   // let it bubble up to whatever turns exceptions into HTTP responses
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "CreateFarmerAsync failed unexpectedly");
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to complete onboarding at the moment.");
+            }
+        }
+        private static void ThrowIfAny(List<string> errors)
+        {
+            if (errors.Count == 0) return;
+
+            var message = errors.Count == 1
+                ? errors[0]
+                : $"{errors.Count} validation errors: {string.Join("; ", errors)}";
+
+            throw new BaseException(ExceptionType.BAD_REQUEST, message, errors);
+        }
+
+        private async Task<BusinessModel> ValidateCriticalInputs(
+        AdminCreateFarmerRequest model, AdminOnBoardingArgs args)
+        {
+            var errors = new List<string>();
+            BusinessModel? business = null;
+
+            // Business
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                errors.Add("Business code is required.");
+            else
+            {
+                business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+                if (business == null)
+                    errors.Add($"Business '{args.businessCode}' does not exist.");
+            }
+
+            // Basic profile
+            if (string.IsNullOrWhiteSpace(model.FirstName))
+                errors.Add("First name is required.");
+
+            // Contact
+            errors.AddRange(ValidateContact(model));
+
+            // Identity
+            AddIfNotNull(errors, ValidateIdentifier(model.NIN, "NIN"));
+            AddIfNotNull(errors, ValidateIdentifier(model.Bvn, "BVN"));
+
+            // Cooperatives / agents / organizations
+            errors.AddRange(await ValidateAssignmentIdentifiers(model));
+
+            ThrowIfAny(errors);
+            return business!;
+        }
+
+        private static void AddIfNotNull(List<string> errors, string? error)
+        {
+            if (error != null) errors.Add(error);
+        }
+
+        private static IEnumerable<string> ValidateContact(AdminCreateFarmerRequest model)
+        {
+            var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
+            var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
+
+            if (!hasEmail && !hasPhone)
+            {
+                yield return "Either email or phone number must be provided.";
+                yield break;
+            }
+
+            if (hasEmail && !new EmailAddressAttribute().IsValid(model.Email))
+                yield return "Invalid email address format.";
+
+            if (hasPhone && !Regex.IsMatch(model.PhoneNumber!, @"^\d{11}$"))
+                yield return "Phone number must be exactly 11 digits and numeric only.";
+        }
+
+        private static string? ValidateIdentifier(string? value, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+
+            if (!value.All(char.IsDigit))
+                return $"{fieldName} must contain only numbers.";
+
+            if (value.Length != 11)
+                return $"{fieldName} must be exactly 11 digits.";
+
+            return null;
+        }
+
+        private static void ApplyDefaultCredentials(AdminCreateFarmerRequest model)
+        {
+            if (!string.IsNullOrWhiteSpace(model.Email))
+                model.Password = GenerateRandomPassword();
+
+            if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
+                model.Pin = GenerateRandomFourDigitsPin();
+        }
+        private static string GenerateRandomPassword()
+        {
+            const int length = 12;
+            const string validChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_+-=[]{}|;:,.<>?";
+            var randomBytes = new byte[length];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(randomBytes);
+            }
+            return new string(randomBytes.Select(b => validChars[b % validChars.Length]).ToArray());
+        }   
+        private static string GenerateRandomFourDigitsPin() =>
+            RandomNumberGenerator.GetInt32(1000, 10000).ToString();
+
+        private async Task<List<string>> ValidateAssignmentIdentifiers(AdminCreateFarmerRequest model)
+        {
+            var errors = new List<string>();
+
+            if (model.OrganizationCode?.Any() == true)
+            {
+                var requested = model.OrganizationCode.Distinct().ToList();
+                var found = await _context.Organizations
+                    .Where(o => requested.Contains(o.OrganizationCode))
+                    .Select(o => o.OrganizationCode)
+                    .ToListAsync();
+
+                var missing = requested.Except(found).ToList();
+                if (missing.Count > 0)
+                    errors.Add($"Organization(s) not found: {string.Join(", ", missing)}.");
+            }
+
+            if (model.CooperativeIds?.Any() == true)
+            {
+                var requested = model.CooperativeIds.Distinct().ToList();
+                var found = await _context.MemberShips
+                    .Where(c => requested.Contains(c.Id))
+                    .Select(c => c.Id)
+                    .ToListAsync();
+
+                var missing = requested.Except(found).ToList();
+                if (missing.Count > 0)
+                    errors.Add($"Cooperative(s) not found: {string.Join(", ", missing)}.");
+            }
+
+            if (model.AgentIds?.Any() == true)
+            {
+                var requested = model.AgentIds.Distinct().ToList();
+                var found = await _context.Agents
+                    .Where(a => requested.Contains(a.Id))
+                    .Select(a => a.Id)
+                    .ToListAsync();
+
+                var missing = requested.Except(found).ToList();
+                if (missing.Count > 0)
+                    errors.Add($"Agent(s) not found: {string.Join(", ", missing)}.");
+            }
+
+            return errors;
+        }
+
+      
         private async Task<(bool status, FarmerModel data)> CreateFarmerOrFails(
-AdminCreateFarmerRequest model,
-OnBoardingArgs args,
-BusinessModel business,
-string userId,
-DateTimeOffset dateTime)
+       AdminCreateFarmerRequest model,
+       AdminOnBoardingArgs args,
+       BusinessModel business,
+       string userId,
+        DateTimeOffset dateTime)
         {
             if (string.IsNullOrWhiteSpace(userId))
                 throw new ValidationException("Could not find target user");
@@ -557,49 +790,11 @@ DateTimeOffset dateTime)
                 new[] { model.FirstName, model.MiddleName, model.LastName }
                 .Where(x => !string.IsNullOrWhiteSpace(x)));
 
-            var farmer = new FarmerModel
-            {
-                OnboardedByUserId = args.OnboardedByUserId,
-                BelongToBusinessCode = args.businessCode,
-                Email = model.Email,
-                Gender = model.Gender,
-                State = model.State,
-                Lga = model.Lga,
-                Location = model.Location,
-                Name = fullName,
-                OnBoardedOn = dateTime,
-                PhoneNumber = model.PhoneNumber,
-                UserId = userId,
-                DateOfBirth = model.DateOfBirth,
-
-                CooperativeIds = model.CooperativeIds?
-                    .Where(x => x.HasValue)
-                    .Select(x => x.Value)
-                    .ToList(),
-
-                AgentIds = model.AgentIds?
-                    .Where(x => x.HasValue)
-                    .Select(x => x.Value)
-                    .ToList(),
-
-                Ward = model.Ward,
-             
-                FarmerCategory = model.FarmerCategory,
-                SelectedItems = model.ValueChainDto,
-                YearsInAgric = model.YearsInAgric,
-                Level = FarmerLevel.Level1.ToString(),
-                HighestLevelOfEducation = model.HighestLevelOfEducation,
-
-
-            };
+            FarmerModel farmer = BuildFarmerModel(model, args, userId, dateTime);
 
             if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
             {
-                if (!string.IsNullOrWhiteSpace(model.NIN))
-                    ValidateIdentifier(model.NIN, "NIN");
 
-                if (!string.IsNullOrWhiteSpace(model.Bvn))
-                    ValidateIdentifier(model.Bvn, "BVN");
 
                 await _onboardingRepository.OnNINBVNUpdate(new Core.Models.Common.UserModel
                 {
@@ -613,14 +808,118 @@ DateTimeOffset dateTime)
                 farmer.NIN = model.NIN;
             }
 
-            var result = await _organizationRepository.CreateOrUpdateFarmer(farmer);
+            var result = await CreateOrUpdateFarmer(farmer, model, args);
 
             return result;
         }
 
+        private static FarmerModel BuildFarmerModel(AdminCreateFarmerRequest model, AdminOnBoardingArgs args, string userId, DateTimeOffset datetime)
+        {
+            return new FarmerModel
+            {
+                OnboardedByUserId = args.OnboardedByUserId,
+                BelongToBusinessCode = args.businessCode,
+                Email = model.Email,
+                Gender = model.Gender,
+                State = model.State,
+                Lga = model.Lga,
+                Location = model.Location,
+                Name = $"{model.FirstName} {model.MiddleName} {model.LastName}".Trim(),
+                OnBoardedOn = datetime,
+                PhoneNumber = model.PhoneNumber,
+                UserId = userId,
+                DateOfBirth = model.DateOfBirth,
+                Ward = model.Ward,
+                FarmerCategory = model.FarmerCategory,
+                SelectedItems = model.ValueChain,
+                YearsInAgric = model.YearsInAgric,
+                Level = FarmerLevel.Level1.ToString(),
+                HighestLevelOfEducation = model.HighestLevelOfEducation,
+            };
+        }
 
 
-        public async Task<(bool status, FarmerModel data)> CreateOrUpdateFarmer(AdminCreateFarmerRequest data)
+      
+
+        private static OnboardingRequestModel BuildUserCreationModel(AdminCreateFarmerRequest model)
+        {
+            return new OnboardingRequestModel
+            {
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+                Password = model.Password,
+                Pin = model.Pin,
+                FirstName = model.FirstName,
+                MiddleName = model.MiddleName,
+                LastName = model.LastName,
+                FullName = $"{model.FirstName} {model.MiddleName} {model.LastName}",
+                DateOfBirth = model.DateOfBirth,
+                SignupMethod = model.SignupMethod
+            };
+        }
+
+       private async Task RunNonCriticalSteps(
+        AdminCreateFarmerRequest model,
+        AdminOnBoardingArgs args,
+        BusinessModel business,
+        OnboardingRequestModel user,
+        DateTimeOffset dateTime, CancellationToken ct)
+        {
+            try
+            {
+                await _audit.LogAsync("CreateFarmer", args.OnboardedByUserId, user.Id, JsonConvert.SerializeObject(model), 
+                    AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);
+                await SendDefaultCredentialChange(user, args.businessCode);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex,
+                    $"Non-critical onboarding step failed for user {user.Id}. " +
+                    "User can continue and complete setup later.");
+            }
+        }
+        private async Task SendDefaultCredentialChange(OnboardingRequestModel model, string businessCode)
+        {
+            var senderEmail = _configuration["Official:Email"];
+
+            var loginUrl = _configuration["Official:LoginUrl"];
+
+            var otpTarget = !string.IsNullOrWhiteSpace(model.Email) ? OtpTarget.Email : OtpTarget.Phone;
+            var destination = otpTarget == OtpTarget.Email ? model.Email : model.PhoneNumber;
+
+            if (otpTarget == OtpTarget.Email)
+            {
+                var frontendUrl = $"{loginUrl}/login";
+                var year = DateTime.UtcNow.Year;
+
+                var email = EmailTemplateBuilder.BuildAccountCreatedEmail(
+                    model.Password,
+                    frontendUrl,
+                    year
+                );
+
+                await _email.SendEmailAsync(
+        senderEmail,
+        destination,
+        email.Subject,
+        email.BodyHtml,
+        email.BodyText
+    );
+            }
+            else
+            {
+                // SMS fallback
+                await _smsService.SendSmsAsync(
+                    destination,
+                    $"Your default pin is {model.Pin}. Kindly login and change this.",
+                    businessCode
+                );
+            }
+        }
+
+
+   
+        private async Task<(bool status, FarmerModel data)> CreateOrUpdateFarmer(FarmerModel farmerModel, AdminCreateFarmerRequest data, AdminOnBoardingArgs args)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -631,31 +930,31 @@ DateTimeOffset dateTime)
                 try
                 {
                     var farmer = await _context.Farmers
-                        .FirstOrDefaultAsync(f => f.UserId == data.UserId);
+                        .FirstOrDefaultAsync(f => f.UserId == farmerModel.UserId);
 
                     if (farmer == null)
                     {
-                        farmer = data.Map();
+                        farmer = farmerModel.Map();
                         await _context.Farmers.AddAsync(farmer);
                     }
                     else
                     {
-                        await UpdateFarmerProfileAsync(data.UserId, new FarmerUpdateModel
+                        await UpdateFarmerProfileAsync(farmerModel.UserId, new FarmerUpdateModel
                         {
-                            Name = data.Name,
-                            PhoneNumber = data.PhoneNumber,
-                            Email = data.Email,
-                            Gender = data.Gender,
-                            State = data.State,
-                            Lga = data.Lga,
-                            Location = data.Location,
-                            Ward = data.Ward,
-                            BVN = data.BVN,
-                            NIN = data.NIN,
-                            FarmerCategory = data.FarmerCategory,
-                            HighestLevelOfEducation = data.HighestLevelOfEducation,
-                            YearsInAgric = data.YearsInAgric,
-                            DateOfBirth = data.DateOfBirth
+                            Name = farmerModel.Name,
+                            PhoneNumber = farmerModel.PhoneNumber,
+                            Email = farmerModel.Email,
+                            Gender = farmerModel.Gender,
+                            State = farmerModel.State,
+                            Lga = farmerModel.Lga,
+                            Location = farmerModel.Location,
+                            Ward = farmerModel.Ward,
+                            BVN = farmerModel.BVN,
+                            NIN = farmerModel.NIN,
+                            FarmerCategory = farmerModel.FarmerCategory,
+                            HighestLevelOfEducation = farmerModel.HighestLevelOfEducation,
+                            YearsInAgric = farmerModel.YearsInAgric,
+                            DateOfBirth = farmerModel.DateOfBirth
                         });
                     }
 
@@ -666,16 +965,16 @@ DateTimeOffset dateTime)
                     catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
                     {
                         farmer = await _context.Farmers
-                            .FirstOrDefaultAsync(f => f.UserId == data.UserId);
+                            .FirstOrDefaultAsync(f => f.UserId == farmerModel.UserId);
                     }
 
-                // ===========================
-                // ORGANIZATION
-                // ===========================
-                if (data.OrganizationCode != null)
+                    // ===========================
+                    // ORGANIZATIONs
+                    // ===========================
+                    if (data.OrganizationCode != null)
                     {
                         var exists = await _context.FarmerOrganizations
-                        .Where(x => x.FarmerId == farmer.Id )
+                        .Where(x => x.FarmerId == farmer.Id)
                         .ToListAsync();
 
 
@@ -691,8 +990,9 @@ DateTimeOffset dateTime)
                                 FarmerId = farmer.Id,
                                 OrganizationCode = id,
                                 IsActive = true,
-                                OnboardedByUserId = data.OnboardedByUserId,
-                                OnBoardedOn = DateTimeOffset.UtcNow
+                                OnboardedByUserId = args.OnboardedByUserId,
+                                OnBoardedOn = DateTimeOffset.UtcNow,
+
                             }));
 
                         _context.FarmerOrganizations.RemoveRange(toRemove);
@@ -720,7 +1020,7 @@ DateTimeOffset dateTime)
                                 FarmerId = farmer.Id,
                                 CooperativeId = id,
                                 IsActive = true,
-                                OnboardedByUserId = data.OnboardedByUserId,
+                                OnboardedByUserId = args.OnboardedByUserId,
                                 JoinedOn = DateTimeOffset.UtcNow
                             }));
 
@@ -728,6 +1028,9 @@ DateTimeOffset dateTime)
                     }
 
 
+                    // ===========================
+                    // AGENTS (BULK SAFE)
+                    // ===========================
                     if (data.AgentIds != null)
                     {
                         var existing = await _context.FarmerAgents
@@ -745,7 +1048,7 @@ DateTimeOffset dateTime)
                             {
                                 FarmerId = farmer.Id,
                                 AgentId = id,
-                                AssignedByUserId = data.OnboardedByUserId,
+                                AssignedByUserId = args.OnboardedByUserId,
                                 AssignedOn = DateTimeOffset.UtcNow,
                                 IsActive = true,
                             }));
@@ -773,6 +1076,12 @@ DateTimeOffset dateTime)
                 }
             });
         }
+        private bool IsUniqueConstraintViolation(DbUpdateException ex)
+        {
+            return ex.InnerException?.Message.Contains("IX_Farmers_UserId") == true;
+        }
+        
+      
 
         private async Task UpdateFarmerValueChainItems(long farmerId, List<ValueChainSelectionDto> valueChainSelections)
         {
@@ -810,7 +1119,143 @@ DateTimeOffset dateTime)
             _context.FarmerValueChainItems.RemoveRange(toRemove);
             await _context.SaveChangesAsync();
         }
+        public async Task<FarmerModel> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update)
+        {
+            if (string.IsNullOrWhiteSpace(userId) || update == null)
+                return null;
 
+            var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.UserId == userId);
+            if (farmer == null) return null;
+
+            var isModified = false;
+
+            if (update.Name != null && update.Name != farmer.Name) { farmer.Name = update.Name; isModified = true; }
+            if (update.Location != null && update.Location != farmer.Location) { farmer.Location = update.Location; isModified = true; }
+            if (update.State != null && update.State != farmer.State) { farmer.State = update.State; isModified = true; }
+            if (update.Lga != null && update.Lga != farmer.Lga) { farmer.Lga = update.Lga; isModified = true; }
+            if (update.Ward != null && update.Ward != farmer.Ward) { farmer.Ward = update.Ward; isModified = true; }
+            if (update.PhoneNumber != null && update.PhoneNumber != farmer.PhoneNumber) { farmer.PhoneNumber = update.PhoneNumber; isModified = true; }
+            if (update.Email != null && update.Email != farmer.Email) { farmer.Email = update.Email; isModified = true; }
+            if (update.Gender != null && update.Gender != farmer.Gender) { farmer.Gender = update.Gender; isModified = true; }
+            if (update.DateOfBirth != null && update.DateOfBirth != farmer.DateOfBirth) { farmer.DateOfBirth = update.DateOfBirth; isModified = true; }
+            if (update.FarmerCategory != null && update.FarmerCategory != farmer.FarmerCategory) { farmer.FarmerCategory = update.FarmerCategory; isModified = true; }
+            if (update.YearsInAgric.HasValue && update.YearsInAgric.Value != farmer.YearsInAgric) { farmer.YearsInAgric = update.YearsInAgric.Value; isModified = true; }
+            if (update.HighestLevelOfEducation != null && update.HighestLevelOfEducation != farmer.HighestLevelOfEducation) { farmer.HighestLevelOfEducation = update.HighestLevelOfEducation; isModified = true; }
+            if (update.SelectedItems != null)
+            {
+                await UpdateFarmerValueChainItems(farmer.Id, update.SelectedItems);
+                isModified = true;
+            }
+            if (!string.IsNullOrEmpty(update.OrganizationCode))
+            {
+                bool exists = await _context.FarmerOrganizations.AnyAsync(x =>
+                    x.FarmerId == farmer.Id &&
+                    x.OrganizationCode == update.OrganizationCode);
+
+                if (!exists)
+                {
+                    await _context.FarmerOrganizations.AddAsync(new FarmerOrganization
+                    {
+                        FarmerId = farmer.Id,
+                        OrganizationCode = update.OrganizationCode,
+                        OnboardedByUserId = farmer.OnboardedByUserId
+                    });
+                }
+            }
+            if (update.CooperativeIds != null)
+            {
+                var existing = _context.FarmerCooperatives.Where(fc => fc.FarmerId == farmer.Id);
+                _context.FarmerCooperatives.RemoveRange(existing);
+                foreach (var coopId in update.CooperativeIds.Distinct())
+                {
+                    await _context.FarmerCooperatives.AddAsync(new FarmerCooperative
+                    {
+                        FarmerId = farmer.Id,
+                        CooperativeId = coopId,
+                        OnboardedByUserId = farmer.OnboardedByUserId,
+                        JoinedOn = DateTimeOffset.Now
+                    });
+                }
+                isModified = true;
+            }
+
+            if (update.AgentIds != null)
+            {
+                var existingAgents = _context.FarmerAgents.Where(fa => fa.FarmerId == farmer.Id);
+                _context.FarmerAgents.RemoveRange(existingAgents);
+                foreach (var agentId in update.AgentIds.Distinct())
+                {
+                    await _context.FarmerAgents.AddAsync(new FarmerAgent
+                    {
+                        FarmerId = farmer.Id,
+                        AgentId = agentId,
+                        AssignedOn = DateTimeOffset.Now
+                    });
+                }
+                isModified = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(update.NIN) || !string.IsNullOrWhiteSpace(update.BVN))
+            {
+                var subAccount = await _context.SubAccounts.FirstOrDefaultAsync(s => s.UserId == farmer.UserId);
+                if (subAccount != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(update.NIN) && update.NIN != subAccount.NIN)
+                    {
+                        subAccount.NIN = update.NIN;
+                        _context.SubAccounts.Update(subAccount);
+                        isModified = true;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(update.BVN) && update.BVN != subAccount.Bvn)
+                    {
+                        subAccount.Bvn = update.BVN;
+                        _context.SubAccounts.Update(subAccount);
+                        isModified = true;
+                    }
+                }
+                else
+                {
+                    var newSub = new SubAccount
+                    {
+                        UserId = farmer.UserId,
+                        NIN = update.NIN,
+                        Bvn = update.BVN,
+                        CreatedOn = DateTimeOffset.UtcNow
+                    };
+                    await _context.SubAccounts.AddAsync(newSub);
+                    isModified = true;
+                }
+
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == farmer.UserId);
+                if (user != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(update.NIN) && update.NIN != user.NIN)
+                    {
+                        user.NIN = update.NIN;
+                        _context.Users.Update(user);
+                        isModified = true;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(update.BVN) && update.BVN != user.BVN)
+                    {
+                        user.BVN = update.BVN;
+                        _context.Users.Update(user);
+                        isModified = true;
+                    }
+                }
+            }
+
+            if (isModified)
+            {
+                _context.Farmers.Update(farmer);
+                await _context.SaveChangesAsync();
+            }
+
+            return farmer.Map();
+        }
+
+        #endregion createfarmer
     }
 }
 

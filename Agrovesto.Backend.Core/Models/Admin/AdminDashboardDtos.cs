@@ -37,9 +37,9 @@ namespace Agrovesto.Backend.Core.Models.Admin
         decimal? ChangePercent,
         string Trend);
 
-    public record LeadingOrganizationDto(long Id, string Name, int Farmers, int Agents);
+    public record LeadingOrganizationDto(string Id, string Name, int Farmers, int Agents);
 
-    public record TopAgentDto(long Id, string Name, int Farmers, int Organizations
+    public record TopAgentDto(string Id, string Name, int Farmers, int Organizations
       //  string? OrganizationName
         );
 

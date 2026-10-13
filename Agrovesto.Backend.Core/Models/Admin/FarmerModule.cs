@@ -168,9 +168,20 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public DateTimeOffset? ApprovedDate { get; set; }
     }
 
+    public class AdminOnBoardingArgs
+    {
+
+        public string? Env { get; set; }
+        public string userType { get; set; }       
+        public string? OnboardedByUserId { get; set; }
+        public string? businessCode { get; set; }
+       
+    }
 
     public class AdminCreateFarmerRequest
     {
+        public string? Pin { get; set; }
+        public string? Password { get; set; }
         public string? Bvn { get; set; }
         public string? NIN { get; set; }
         [MaxLength(15, ErrorMessage = "FirstName cannot exceed 15 characters.")]
@@ -195,9 +206,9 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public long YearsInAgric { get; set; }
 
         public string? HighestLevelOfEducation { get; set; }
-        public List<long?>? AgentIds { get; set; }
-        public List<string?>? OrganizationCode { get; set; }
+        public List<long>? AgentIds { get; set; }
+        public List<string>? OrganizationCode { get; set; }
       
-        public List<long?>? CooperativeIds { get; set; }
+        public List<long>? CooperativeIds { get; set; }
     }
 }

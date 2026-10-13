@@ -7,12 +7,19 @@ namespace Agrovesto.Backend.Core.Exceptions
     {
         public HttpStatusCode HttpStatusCode { get; }
         public string ExceptionMessage { get; }
+        public IReadOnlyList<string> Errors { get; }
 
         public BaseException(ExceptionType exceptionType, string? customMessage = null)
+            : this(exceptionType, customMessage, null)
+        {
+        }
+
+        public BaseException(ExceptionType exceptionType, string? customMessage, IEnumerable<string>? errors)
             : base(customMessage ?? ResolveMessage(exceptionType))
         {
             HttpStatusCode = ResolveHttpStatus(exceptionType);
             ExceptionMessage = customMessage ?? ResolveMessage(exceptionType);
+            Errors = errors?.ToList() ?? new List<string>();
         }
 
         private static HttpStatusCode ResolveHttpStatus(ExceptionType type)

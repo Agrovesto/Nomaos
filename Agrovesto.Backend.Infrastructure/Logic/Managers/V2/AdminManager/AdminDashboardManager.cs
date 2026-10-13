@@ -118,7 +118,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 {
                     o.OrganizationId,
                     o.CompanyName,
-
+                    o.OrganizationCode,
                     // farmers onboarded in the period who are linked to this organization
                     Farmers = _db.Farmers.Count(
                         f =>
@@ -140,7 +140,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .ToListAsync(ct);
 
             return rows
-                .Select(x => new LeadingOrganizationDto(x.OrganizationId, x.CompanyName, x.Farmers, x.Agents))
+                .Select(x => new LeadingOrganizationDto(x.OrganizationCode, x.CompanyName, x.Farmers, x.Agents))
                 .ToList();
         }
 
@@ -157,7 +157,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 {
                     a.Id,
                     a.Name,
-
+                    a.UserId,
                     // an agent can belong to several organizations; show one deterministically
                     //Organization = _db.OrganizationAgents
                     //    .Where(oa => oa.AgentId == a.Id)
@@ -178,7 +178,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .Take(3)
                 .ToListAsync(ct);
 
-            return rows.Select(x => new TopAgentDto(x.Id, x.Name, x.Farmers, x.Organization)).ToList();
+            return rows.Select(x => new TopAgentDto(x.UserId, x.Name, x.Farmers, x.Organization)).ToList();
         }
 
         // ================================================================ registrations + yearly chart
