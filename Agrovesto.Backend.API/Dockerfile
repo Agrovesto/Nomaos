@@ -118,7 +118,7 @@ RUN printf '%s\n' "$COMMIT_SHA" \
 # STAGE 3 — RUNTIME
 ########################################
 
-FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 
 ########################################
 # Runtime dependencies

@@ -97,14 +97,64 @@ jobs:
       - name: Restore
         run: dotnet restore "${{ env.SOLUTION_PATH }}"
 
-      - name: List vulnerable packages
+
+      - name: Audit NuGet vulnerabilities and show upgrade candidates
+        shell: bash
         run: |
-          OUT=$(dotnet list "${{ env.SOLUTION_PATH }}" package --vulnerable --include-transitive 2>&1 || true)
-          echo "$OUT"
-          if echo "$OUT" | grep -qE "(High|Critical)"; then
-            echo "::error::High/Critical vulnerable NuGet packages detected"
+            set +e
+
+            # 1. Find vulnerable direct and transitive packages.
+            VULN_OUTPUT=$(dotnet list "$SOLUTION_PATH" package \
+            --vulnerable --include-transitive 2>&1)
+            VULN_EXIT=$?
+
+            echo "========== VULNERABLE NUGET PACKAGES =========="
+            printf '%s\n' "$VULN_OUTPUT"
+
+            # Stop if the vulnerability scan itself failed.
+            if [ "$VULN_EXIT" -ne 0 ]; then
+            echo "::error::NuGet vulnerability scan command failed."
+            exit "$VULN_EXIT"
+            fi
+
+            # 2. Find available upgrades separately.
+            UPDATE_OUTPUT=$(dotnet list "$SOLUTION_PATH" package \
+            --outdated --include-transitive 2>&1)
+            UPDATE_EXIT=$?
+
+            echo ""
+            echo "========== AVAILABLE UPGRADE CANDIDATES =========="
+            printf '%s\n' "$UPDATE_OUTPUT"
+
+            if [ "$UPDATE_EXIT" -ne 0 ]; then
+            echo "::warning::Could not retrieve package upgrade candidates."
+            fi
+
+            # 3. Publish both reports in the GitHub Actions Summary.
+            {
+            echo "## NuGet Security Audit"
+            echo ""
+            echo "### Vulnerable Packages"
+            echo '```text'
+            printf '%s\n' "$VULN_OUTPUT"
+            echo '```'
+            echo ""
+            echo "### Available Upgrade Candidates"
+            echo "These are available updates, not guaranteed security fixes."
+            echo '```text'
+            printf '%s\n' "$UPDATE_OUTPUT"
+            echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            # 4. Keep the security gate enforced.
+            if printf '%s\n' "$VULN_OUTPUT" |
+            grep -qiE '(^|[[:space:]])(High|Critical)([[:space:]]|$)'; then
+            echo "::error::High/Critical vulnerable NuGet packages detected. Review the upgrade candidates and advisory URLs above."
             exit 1
-          fi
+            fi
+
+            echo "No High/Critical NuGet findings detected."
+
 
   # =========================================================================
   # PR: Tests + Coverage + SonarQube SAST
@@ -243,6 +293,7 @@ jobs:
         if: always()
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: 0.75.0
           image-ref: ${{ env.APP_NAME }}:pr-scan
           scanners: vuln
           format: json
