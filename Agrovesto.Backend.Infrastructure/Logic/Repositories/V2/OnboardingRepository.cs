@@ -32,6 +32,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using FarmerPersonalInfoDto = Agrovesto.Backend.Core.Models.Businesses.FarmerPersonalInfoDto;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
