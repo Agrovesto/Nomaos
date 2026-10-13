@@ -63,7 +63,7 @@ public class UserProfileEmailResolutionTests
     }
 
     private static OnboardingRepository CreateRepository(DataContext context) =>
-        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance);
+        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance, null!);
 
     private static async Task<bool> IsReachableAsync(DataContext context)
     {
