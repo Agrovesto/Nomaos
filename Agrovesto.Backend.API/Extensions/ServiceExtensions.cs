@@ -15,11 +15,13 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
+using Agrovesto.Backend.Infrastructure.Logic.Services.RolePermissionService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 
@@ -200,6 +202,18 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ICredentialChangeHandler, PasswordChangeHandler>();
             services.AddScoped<ICredentialChangeHandler, PinChangeHandler>();
             services.AddScoped<CredentialChangeService>();
+
+            // Admin portal services, permission checks, audit trail, and export support.
+            services.AddMemoryCache();
+            services.AddScoped<IAdminDashboardManager, AdminDashboardManager>();
+            services.AddScoped<IAdminUserManagementManager, AdminUserManagementManager>();
+            services.AddScoped<IAdminFarmerManager, AdminFarmerManager>();
+            services.AddScoped<IRoleAccessManager, RoleAccessManager>();
+            services.AddScoped<IAdminAuditLogger, AdminAuditLogger>();
+            services.AddScoped<IInputFinanceReader, EfInputFinanceReader>();
+            services.AddScoped<IClientInfoProvider, ClientInfoProvider>();
+            services.AddScoped<IPermissionService, PermissionService>();
+            services.AddSingleton<IPermissionCacheInvalidator, PermissionCacheInvalidator>();
 
         }
     }

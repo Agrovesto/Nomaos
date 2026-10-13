@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
@@ -261,6 +261,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return await _onBoardingManager.CreateOrganization(model, args);
             },
             result => Ok(Success(result, ResponseMessages.Successful)));
+        }
+
+        [HttpPost("refresh")]
+        [AllowAnonymous]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        {
+            if (request is null || string.IsNullOrWhiteSpace(request.RefreshToken))
+                return BadRequest(new { message = "Refresh token is required." });
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var result = await _onBoardingManager.RefreshToken(request.RefreshToken, ip);
+            return result.Status
+                ? Ok(new Response<TokenModel>
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = result.Message,
+                    Data = result.Response
+                })
+                : Unauthorized(new { message = result.Message });
         }
 
         [HttpPost("login")]

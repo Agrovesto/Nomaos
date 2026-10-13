@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -314,8 +314,16 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Phone_number
         { get; set; }
     }
+    public class RefreshTokenRequest
+    {
+        public string RefreshToken { get; set; } = string.Empty;
+    }
+
     public class TokenModel
     {
+        public List<string> Permissions { get; set; } = new();
+        public string? RefreshToken { get; set; }
+        public DateTime RefreshTokenExpiresOn { get; set; }
         public string Token { get; set; }
         public TokenType TokenType { get; set; }
         public string Authmethod { get; set; }

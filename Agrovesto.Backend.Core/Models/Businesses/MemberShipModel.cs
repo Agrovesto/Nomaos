@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,6 +19,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public bool IsLeaderAFarmer { get; set; }
         public long MemberShipTypeId { get; set; }
+        [MaxLength(50, ErrorMessage = "Name cannot exceed 50 characters.")]
         public string Name { get; set; }
         public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Password { get; set; }
@@ -30,9 +32,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public long OrganizationId { get; set; }
+        [MaxLength(11, ErrorMessage = "Phone number cannot exceed 11 characters.")]
         public string? PhoneNumber { get; set; }
+        [MaxLength(15, ErrorMessage = "FirstName cannot exceed 15 characters.")]
         public string? MembershipLeaderFirstName { get; set; }
+        [MaxLength(15, ErrorMessage = "MiddleName cannot exceed 15 characters.")]
         public string? MembershipLeaderMiddleName { get; set; }
+        [MaxLength(15, ErrorMessage = "LastName cannot exceed 15 characters.")]
         public string? MembershipLeaderLastName { get; set; }
         public string? MembershipLeaderGender { get; set; }
     }
