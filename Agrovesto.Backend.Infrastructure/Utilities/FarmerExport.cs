@@ -20,7 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
             foreach (var r in rows)
                 sb.AppendLine(string.Join(",",
                     //r.SerialNo,
-                    Esc(r.FarmerId), 
+                    Esc(r.FarmerId),
                     Esc(r.FullName), Esc(r.PhoneNumber),
                     r.RegDate.ToString("dd/MM/yyyy"), Esc(r.Status), r.Farms,
                     Esc(r.AssignedAgent), Esc(r.Organization)));

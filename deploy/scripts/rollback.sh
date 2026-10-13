@@ -44,7 +44,7 @@ done
 require_docker
 load_app_env "$APP_NAME"
 
-APP_PORT="${APP_PORT:-5000}"
+APP_PORT="${APP_PORT:-5007}"
 UPSTREAM_NAME="${UPSTREAM_NAME:-${APP_NAME//-/_}}"
 UPSTREAM_FILE="$NOMAOS_STATE_DIR/nginx/upstreams/${UPSTREAM_NAME}.conf"
 NGINX_CONTAINER="${NGINX_CONTAINER:-nomaos-nginx}"

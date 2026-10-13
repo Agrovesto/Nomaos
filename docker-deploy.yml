@@ -1,0 +1,433 @@
+name: Docker Build & Blue/Green Deploy
+
+on:
+  pull_request:
+    branches:
+      - devops
+  push:
+    branches:
+      - master
+      - devops
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Which app to deploy"
+        required: true
+        default: nomaos-api
+        type: choice
+        options:
+          - nomaos-api
+      environment:
+        description: "Target environment"
+        required: true
+        default: prod
+        type: choice
+        options:
+          - staging
+          - prod
+
+concurrency:
+  group: "docker-deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}-${{ inputs.app || 'nomaos-api' }}"
+  # Stale PR runs are cancelled; deploys are never cancelled mid-flight.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least privilege by default; build/deploy jobs add id-token below.
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: agrovesto-dev-nomaos
+  APP_NAME: ${{ inputs.app || 'nomaos-api' }}
+  # push to devops -> staging, push to master -> prod, manual -> chosen input
+  TARGET_ENV: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
+  # Test project that references the API (confirm the csproj name)
+  TEST_PROJECT: NomaOS.Test/NomaOS.Test.csproj
+
+jobs:
+
+  ##########################################################################
+  # PR: secret + filesystem scan
+  ##########################################################################
+  TrivyScan:
+    runs-on: ubuntu-latest
+    environment: staging
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341 # v3.99.0
+        with:
+          extra_args: --only-verified --fail
+
+      - name: Trivy scan repo (vuln + secrets + misconfig)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: "1"
+          severity: "HIGH,CRITICAL"
+
+  ##########################################################################
+  # PR: SonarQube (build + tests + coverage + quality gate)
+  # Runs in parallel with TrivyScan and validate-pr.
+  ##########################################################################
+  SASTSonarQube:
+    runs-on: ubuntu-latest
+    environment: secops
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 30
+    env:
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT: ${{ secrets.SONAR_PROJECT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET (SDK from global.json)
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install SonarScanner
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Restore
+        run: dotnet restore "$TEST_PROJECT"
+
+      - name: SonarQube begin
+        run: |
+          VERSION=$(dotnet msbuild Agrovesto.Backend.API/Agrovesto.Backend.API.csproj -getProperty:Version)
+          dotnet sonarscanner begin \
+            /k:"${SONAR_PROJECT}" \
+            /d:sonar.host.url="${SONAR_HOST_URL}" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.projectVersion="${VERSION:-0.0.0}" \
+            /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/coverage/**/coverage.opencover.xml" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.md"
+
+      # The test project references the API, so this builds everything once.
+      - name: Build
+        run: dotnet build "$TEST_PROJECT" -c Release --no-restore
+
+      - name: Test and coverage
+        run: |
+          dotnet test "$TEST_PROJECT" -c Release --no-build \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: SonarQube end
+        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
+
+      - name: Check SonarQube quality gate
+        uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
+        timeout-minutes: 5
+        with:
+          # dotnet-sonarscanner writes the task file here, not .scannerwork/
+          scanMetadataReportFile: .sonarqube/out/.sonar/report-task.txt
+
+  ##########################################################################
+  # PR: build the image once and scan it (no push)
+  ##########################################################################
+  validate-pr:
+    name: Validate Pull Request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Build image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: nomaos-api:scan
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+          provenance: false
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
+
+      - name: Trivy image scan (report only; repo scan above gates the PR)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nomaos-api:scan
+          scanners: vuln
+          format: json
+          output: trivy-image-report.json
+          exit-code: "0"
+          ignore-unfixed: false
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      - name: Job summary
+        if: always()
+        run: |
+          [ -f trivy-image-report.json ] || exit 0
+          COUNT=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-image-report.json)
+          {
+            echo "## 🛡️ Trivy image scan"
+            if [ "$COUNT" -eq 0 ]; then
+              echo "✅ No HIGH or CRITICAL vulnerabilities found."
+            else
+              echo "⚠️ Found **$COUNT** HIGH/CRITICAL vulnerabilities (top 30 shown, full JSON attached as an artifact)."
+              echo
+              echo "| Package | Severity | ID | Installed | Fixed | Target |"
+              echo "| --- | --- | --- | --- | --- | --- |"
+              jq -r '.Results[]? | .Target as $t | (.Vulnerabilities // [])[]
+                | "| \(.PkgName) | \(.Severity) | \(.VulnerabilityID) | \(.InstalledVersion) | \(.FixedVersion // "-") | \($t) |"' \
+                trivy-image-report.json | head -n 30
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full Trivy report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: trivy-image-report
+          path: trivy-image-report.json
+          if-no-files-found: ignore
+
+  ##########################################################################
+  # BUILD & PUSH (push to master/devops or manual dispatch)
+  # Native arm64 runner: no QEMU emulation, so the .NET build is not
+  # ~10x slower. If your plan can't use arm runners, switch back to
+  # ubuntu-latest + docker/setup-qemu-action.
+  ##########################################################################
+  build-and-push:
+    name: Build and Push Image
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read # look up the merged PR author/approvers
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ steps.meta.outputs.short_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0 # full history + tags so `git describe` works
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure ECR repository exists
+        run: |
+          if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
+            aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+            aws ecr put-lifecycle-policy --repository-name "$ECR_REPOSITORY" --lifecycle-policy-text '{
+              "rules": [{
+                "rulePriority": 1,
+                "description": "Keep only the last 3 images",
+                "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 3},
+                "action": {"type": "expire"}
+              }]
+            }' >/dev/null
+          fi
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
+
+      - name: Build metadata (git + PR)
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Values end up in JSON/labels, so keep them to a safe character set.
+          safe() { printf '%s' "$1" | tr -c 'A-Za-z0-9._/@+,-' '_'; }
+
+          SHORT_SHA="${GITHUB_SHA::12}"
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "$SHORT_SHA")
+
+          # Merged PR for this commit (if any), its author, and who approved it.
+          # Best effort: direct pushes simply have no PR.
+          PR_NUMBER=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+            --jq '.[0].number // empty' 2>/dev/null || true)
+          PR_AUTHOR=""; PR_APPROVERS=""
+          if [ -n "$PR_NUMBER" ]; then
+            PR_AUTHOR=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              --jq '.user.login' 2>/dev/null || true)
+            PR_APPROVERS=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" --paginate \
+              --jq '.[] | select(.state=="APPROVED") | .user.login' 2>/dev/null \
+              | sort -u | paste -sd, - || true)
+          fi
+
+          {
+            echo "short_sha=${SHORT_SHA}"
+            echo "image=${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "version=$(safe "$VERSION")"
+            echo "branch=$(safe "$GITHUB_REF_NAME")"
+            echo "run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "actor=$(safe "$GITHUB_ACTOR")"
+            echo "pr_number=$(safe "$PR_NUMBER")"
+            echo "pr_author=$(safe "$PR_AUTHOR")"
+            echo "pr_approvers=$(safe "$PR_APPROVERS")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Build, tag, and push image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
+            ${{ steps.meta.outputs.image }}:latest
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_VERSION=${{ steps.meta.outputs.version }}
+            BUILT_AT=${{ steps.meta.outputs.built_at }}
+            GIT_BRANCH=${{ steps.meta.outputs.branch }}
+            BUILD_RUN_URL=${{ steps.meta.outputs.run_url }}
+            BUILD_ACTOR=${{ steps.meta.outputs.actor }}
+            PR_NUMBER=${{ steps.meta.outputs.pr_number }}
+            PR_AUTHOR=${{ steps.meta.outputs.pr_author }}
+            PR_APPROVERS=${{ steps.meta.outputs.pr_approvers }}
+          provenance: false
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
+
+  ##########################################################################
+  # DEPLOY via SSM
+  # Waits for the command to finish and fails the job if it fails.
+  ##########################################################################
+  deploy:
+    name: Deploy via Blue/Green
+    needs: build-and-push
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout deploy script
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          sparse-checkout: deploy
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve target instance
+        id: instance
+        run: |
+          IDS=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${APP_NAME}-${TARGET_ENV}" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+          COUNT=$(echo "$IDS" | wc -w)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "::error::Expected exactly 1 running instance tagged ${APP_NAME}-${TARGET_ENV}, found ${COUNT}"
+            exit 1
+          fi
+          echo "id=${IDS}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via SSM (blue/green)
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}:${{ needs.build-and-push.outputs.tag }}
+          INSTANCE_ID: ${{ steps.instance.outputs.id }}
+        run: |
+          if [ "$TARGET_ENV" = "prod" ]; then ASPNET_ENV=Production; else ASPNET_ENV=Staging; fi
+
+          # Ship the script from the repo so the host can never drift from git.
+          # The wrapper is POSIX sh (SSM may run it under dash); the script
+          # itself runs under bash.
+          B64=$(base64 -w0 deploy/deploy-container.sh)
+          SCRIPT=$(cat <<EOF
+          set -eu
+          umask 077
+          trap 'rm -f /tmp/deploy-container.sh' EXIT
+          echo '${B64}' | base64 -d > /tmp/deploy-container.sh
+          APP_NAME='${APP_NAME}' ASPNETCORE_ENVIRONMENT='${ASPNET_ENV}' AWS_REGION='${AWS_REGION}' \
+            bash /tmp/deploy-container.sh '${IMAGE}'
+          EOF
+          )
+          PARAMS=$(jq -n --arg s "$SCRIPT" '{commands: [$s]}')
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${IMAGE##*:}" \
+            --timeout-seconds 600 \
+            --parameters "$PARAMS" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $CMD_ID"
+
+          STATUS=Pending
+          for _ in $(seq 1 120); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Pending|InProgress|Delayed) sleep 5 ;; *) break ;; esac
+          done
+
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text || true
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Deployment ${STATUS} on ${INSTANCE_ID}"
+            exit 1
+          fi
+
+      # Optional external check. Set HEALTH_URL as an environment variable
+      # (per environment) to enable it.
+      - name: External health check
+        if: vars.HEALTH_URL != ''
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null; then
+              echo "Healthy: ${{ needs.build-and-push.outputs.tag }}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Health check failed: $HEALTH_URL"
+          exit 1

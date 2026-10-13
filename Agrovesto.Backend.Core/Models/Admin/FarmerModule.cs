@@ -172,10 +172,10 @@ namespace Agrovesto.Backend.Core.Models.Admin
     {
 
         public string? Env { get; set; }
-        public string userType { get; set; }       
+        public string userType { get; set; }
         public string? OnboardedByUserId { get; set; }
         public string? businessCode { get; set; }
-       
+
     }
 
     public class AdminCreateFarmerRequest
@@ -199,7 +199,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public string? Location { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
-        public string? Ward { get; set; }           
+        public string? Ward { get; set; }
         public string? FarmerCategory { get; set; }
         public List<ValueChainSelectionDto>? ValueChain { get; set; }
 
@@ -208,7 +208,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public string? HighestLevelOfEducation { get; set; }
         public List<long>? AgentIds { get; set; }
         public List<string>? OrganizationCode { get; set; }
-      
+
         public List<long>? CooperativeIds { get; set; }
     }
 }

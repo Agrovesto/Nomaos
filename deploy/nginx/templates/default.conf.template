@@ -55,9 +55,12 @@ proxy_busy_buffers_size 32k;
 # the ALB's health checker hitting the instance IP, a direct curl, the old
 # ELB DNS name — still reaches the API. That mirrors the `server_name <dns> _;`
 # catch-all the host nginx config used, so nothing that works today breaks.
+
 server {
     listen 80 default_server;
     server_name ${NOMAOS_API_SERVER_NAME} _;
+    server_name ${NOMAOS_API_SERVER_NAME} dev-api-test.nomaos.com _;
+
 
     add_header X-Frame-Options        "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff"    always;

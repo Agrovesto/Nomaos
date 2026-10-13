@@ -87,8 +87,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (user == null || role == null || role.BusinessId != businessId)
                 return false;
 
-            var result = await _userManager.AddToRoleAsync(user, role.Name);
-            return result.Succeeded;
+            var assignment = await _context.UserRoles.FirstOrDefaultAsync(x =>
+                x.UserId == userId && x.RoleId == role.Id && x.BusinessId == businessId);
+
+            if (assignment is null)
+            {
+                _context.UserRoles.Add(new ApplicationUserRole
+                {
+                    UserId = userId,
+                    RoleId = role.Id,
+                    BusinessId = businessId,
+                    IsActive = true
+                });
+            }
+            else
+            {
+                assignment.IsActive = true;
+            }
+
+            await _context.SaveChangesAsync();
+            return true;
         }
         #endregion business
 
@@ -229,21 +247,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
         public async Task<PagedListResponse<List<RoleModel>>> GetRolesAsync()
         {
-            var roles = await _context.Roles.Where(x => !x.IsAvailableToAdmin).ToListAsync();
-
-            var roleMap = roles.Select(x => x.Map()).ToList();
-            return new PagedListResponse<List<RoleModel>>
-            {
-                Data = roleMap,
-                Code = "00",
-                Message = "",
-                Count = roleMap.Count,
-                Succeeded = true,
-            };
-        }
-        public async Task<PagedListResponse<List<RoleModel>>> GetAdminRolesAsync()
-        {
-            var roles = await _context.Roles.Where(x => x.IsAvailableToAdmin).ToListAsync();
+            var roles = await _roleManager.Roles.ToListAsync();
 
             var roleMap = roles.Select(x => x.Map()).ToList();
             return new PagedListResponse<List<RoleModel>>

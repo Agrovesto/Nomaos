@@ -204,7 +204,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             var prevTo = prev.To;
 
             var total = await _db.Users.LongCountAsync(
-            //    u => 
+            //    u =>
             //u.CreatedOn >= curFrom && u.CreatedOn < curTo,  //uncomment if it is to get only within the period
                 ct);
             var previousTotal = await _db.Users.LongCountAsync(u => u.CreatedOn >= prevFrom && u.CreatedOn < prevTo, ct);

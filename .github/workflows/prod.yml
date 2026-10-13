@@ -1,561 +1,405 @@
-name: Build and Deploy (master branch)
+name: Prod - Validate, Promote & Deploy to ECS
 
 on:
+  pull_request:
+    branches: [master]
   push:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Source ECR tag in dev/staging account (e.g. short SHA or staging-latest)."
+        required: false
+        default: "staging-latest"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: "prod-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'deploy' }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# ============================================================
-# GITHUB TOKEN PERMISSIONS
-# ============================================================
 permissions:
   contents: read
 
 env:
-  DOTNET_VERSION: 8.0.x
-  DOTNET_SDK_VERSION: 8.0.423
+  # ----- Source (dev/staging account) -----
+  SRC_AWS_REGION: eu-west-1
+  SRC_ECR_REPOSITORY: agrovesto-dev-nomaos
+  # ----- Destination (prod account) -----
+  PROD_AWS_REGION: eu-west-1
+  PROD_ECR_REPOSITORY: agrovesto-prod-nomaos
+  PROD_ECS_CLUSTER: nomaos-prod-cluster
+  PROD_ECS_SERVICE: nomaos-api-prod
+  PROD_ECS_CONTAINER: nomaos-api
+  PROD_ECS_TASK_FAMILY: nomaos-api-prod
+  # ----- Shared -----
+  APP_NAME: nomaos-api
   SOLUTION_PATH: Agrovesto.Backend.sln
-  PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
-  PUBLISH_DIR: ${{ github.workspace }}/publish
-  COMMIT_SHA: ${{ github.sha }}
-  DOTNET_NOLOGO: true
-  DOTNET_CLI_TELEMETRY_OPTOUT: true
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-  DOTNET_DETERMINISTIC: true
+  TEST_PROJECT: NomaOS.Test/NomaOS.Test.csproj
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  build-deploy-master:
-    name: 🚀 Build + Test + Deploy (master branch)
 
+  # =========================================================================
+  # PR: Secret & FS scans
+  # =========================================================================
+  secret-and-fs-scan:
+    name: 🔒 Secret & FS Scan
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-
-    timeout-minutes: 30
-
-    environment:
-      name: dev
-      url: https://noma-api.nomaos.com/health/ready
-
-    outputs:
-      version: ${{ steps.version.outputs.value }}
-
+    timeout-minutes: 15
     steps:
-      # =========================================================
-      # CHECKOUT
-      # =========================================================
-
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
 
-      # =========================================================
-      # PIN SDK
-      # =========================================================
-
-      - name: 📌 Pin .NET SDK version
-        run: |
-          cat > global.json << EOF
-          {
-            "sdk": {
-              "version": "${{ env.DOTNET_SDK_VERSION }}",
-              "rollForward": "latestPatch"
-            }
-          }
-          EOF
-
-          echo "===== global.json ====="
-          cat global.json
-
-
-      # =========================================================
-      # SETUP .NET
-      # =========================================================
-
-      - name: ⚙️ Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: TruffleHog
+        uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341 # v3.99.0
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          extra_args: --only-verified --fail
 
+      - name: Trivy repo scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: "1"
+          severity: "HIGH,CRITICAL"
 
-      # =========================================================
-      # VERIFY SDK
-      # =========================================================
+  # =========================================================================
+  # PR: Checkov
+  # =========================================================================
+  iac-scan:
+    name: 🧱 Checkov
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,github_actions,terraform,kubernetes
+          soft_fail: false
+          quiet: true
+          output_format: cli
 
-      - name: 🔍 Verify SDK
-        run: |
-          SDK=$(dotnet --version)
+  # =========================================================================
+  # PR: Tests + SonarQube
+  # =========================================================================
+  sonarqube-sast:
+    name: 🧪 Tests + SonarQube
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: secops
+    timeout-minutes: 30
+    env:
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT: ${{ secrets.SONAR_PROJECT }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
 
-          echo "Active SDK: $SDK"
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          global-json-file: global.json
 
-          if [[ "$SDK" != 8.* ]]; then
-            echo "❌ Expected .NET 8 SDK"
-            exit 1
-          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
 
-
-      # =========================================================
-      # CACHE NUGET
-      #
-      # This is the most important performance optimization.
-      #
-      # We persist the dependency cache, NOT the application.
-      # ==============================================================
-
-      - name: 💾 Cache NuGet packages
-        uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Packages.props', '**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
 
-          key: >
-            nuget-${{ runner.os }}-
-            dotnet-${{ env.DOTNET_SDK_VERSION }}-
-            ${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-
-          restore-keys: |
-            nuget-${{ runner.os }}-dotnet-${{ env.DOTNET_SDK_VERSION }}-
-            nuget-${{ runner.os }}-
-
-
-      # =========================================================
-      # RESTORE
-      # =========================================================
-
-      - name: 📦 Restore dependencies
+      - name: Install SonarScanner
         run: |
-          dotnet restore \
-            "${{ env.SOLUTION_PATH }}" \
-            --verbosity quiet \
-            /p:ContinuousIntegrationBuild=true
+          dotnet tool install --global dotnet-sonarscanner
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
+      - name: Restore
+        run: dotnet restore "$TEST_PROJECT"
 
-      # =========================================================
-      # VERSION
-      # =========================================================
-
-      - name: 🏷️ Resolve version
-        id: version
+      - name: SonarQube begin
         run: |
-          VERSION=$(
-            grep \
-              -oPm1 '(?<=<Version>)[^<]+' \
-              "${{ env.PROJECT_PATH }}" \
-              2>/dev/null ||
-              true
-          )
+          VERSION=$(dotnet msbuild Agrovesto.Backend.API/Agrovesto.Backend.API.csproj -getProperty:Version 2>/dev/null || echo "0.0.0")
+          dotnet sonarscanner begin \
+            /k:"${SONAR_PROJECT}" \
+            /d:sonar.host.url="${SONAR_HOST_URL}" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.projectVersion="${VERSION:-0.0.0}" \
+            /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/coverage/**/coverage.opencover.xml" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.md"
 
-          VERSION="${VERSION:-1.0.${{ github.run_number }}}"
+      - name: Build
+        run: dotnet build "$TEST_PROJECT" -c Release --no-restore
 
-          echo "value=$VERSION" \
-            >> "$GITHUB_OUTPUT"
-
-          echo "📦 Version: $VERSION"
-
-
-      # =========================================================
-      # BUILD
-      # =========================================================
-
-      - name: 🏗️ Build
-        id: build
+      - name: Test and coverage
         run: |
-          START=$(date +%s)
+          dotnet test "$TEST_PROJECT" -c Release --no-build \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
-          dotnet build \
-            "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-restore \
-            --verbosity quiet \
-            -maxcpucount \
-            2>&1 | tee build.log
+      - name: SonarQube end
+        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
 
-          EXIT_CODE=${PIPESTATUS[0]}
-
-          END=$(date +%s)
-
-          {
-            echo "### 🏗️ Build"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| Status | $([ "$EXIT_CODE" -eq 0 ] && echo '✅ Success' || echo '❌ Failed') |"
-            echo "| Duration | $((END - START))s |"
-            echo "| Warnings | ⚠️ $(grep -c ': warning ' build.log || true) |"
-            echo "| Errors | ❌ $(grep -c ': error ' build.log || true) |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          exit "$EXIT_CODE"
-
-
-      # =========================================================
-      # TEST
-      # =========================================================
-
-      - name: 🧪 Test with coverage
-        id: test
-        run: |
-          START=$(date +%s)
-
-          dotnet test \
-            "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-build \
-            --verbosity minimal \
-            --logger "trx;LogFileName=test-results.trx" \
-            --collect "XPlat Code Coverage" \
-            --settings coverlet.runsettings \
-            --results-directory ./TestResults \
-            -p:MaxCpuCount=2
-
-          EXIT_CODE=$?
-
-          END=$(date +%s)
-
-          echo "Tests completed in $((END - START))s"
-
-          exit "$EXIT_CODE"
-
-
-      # =========================================================
-      # PUBLISH APPLICATION
-      #
-      # THIS STAYS ON THE SAME RUNNER.
-      #
-      # Nothing goes to GitHub artifact storage.
-      # =========================================================
-
-      - name: 🚀 Publish application
-        id: publish
-        run: |
-
-          START=$(date +%s)
-
-          rm -rf "${{ env.PUBLISH_DIR }}"
-
-          dotnet publish \
-            "${{ env.PROJECT_PATH }}" \
-            --configuration Release \
-            --runtime linux-x64 \
-            --framework net8.0 \
-            --self-contained true \
-            --output "${{ env.PUBLISH_DIR }}" \
-            --verbosity quiet \
-            -p:ContinuousIntegrationBuild=true \
-            -p:Deterministic=true \
-            -p:DebugType=none \
-            -p:DebugSymbols=false \
-            -maxcpucount
-
-
-          END=$(date +%s)
-
-          SIZE=$(
-            du -sh "${{ env.PUBLISH_DIR }}" |
-            cut -f1
-          )
-
-
-          {
-            echo "### 🚀 Publish"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| ✅ Status | Success |"
-            echo "| 📦 Size | $SIZE |"
-            echo "| 📁 Files | $(find "${{ env.PUBLISH_DIR }}" -type f | wc -l | tr -d ' ') |"
-            echo "| ⏱️ Duration | $((END - START))s |"
-            echo "| 🏷️ Version | ${{ steps.version.outputs.value }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-
-      # =========================================================
-      # WRITE DEPLOYMENT METADATA
-      # =========================================================
-
-      - name: 🏷️ Write deployment metadata
-        run: |
-
-          echo "${{ env.COMMIT_SHA }}" \
-            > "${{ env.PUBLISH_DIR }}/.commit-sha"
-
-          echo "${{ steps.version.outputs.value }}" \
-            > "${{ env.PUBLISH_DIR }}/.version"
-
-          date -u +"%Y-%m-%dT%H:%M:%SZ" \
-            > "${{ env.PUBLISH_DIR }}/.deployed-at"
-
-
-          echo "===== Metadata ====="
-
-          ls -la \
-            "${{ env.PUBLISH_DIR }}/.commit-sha" \
-            "${{ env.PUBLISH_DIR }}/.version" \
-            "${{ env.PUBLISH_DIR }}/.deployed-at"
-
-          echo ""
-          echo "===== SHA ====="
-
-          cat "${{ env.PUBLISH_DIR }}/.commit-sha"
-
-
-      # =========================================================
-      # SSH AGENT
-      # =========================================================
-
-      - name: 🔐 Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Quality gate
+        uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
+        timeout-minutes: 5
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
+          scanMetadataReportFile: .sonarqube/out/.sonar/report-task.txt
 
+  # =========================================================================
+  # PR: Validate image (build + Trivy, no push)
+  # =========================================================================
+  validate-image:
+    name: 🐳 Build & Scan Image (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      # =========================================================
-      # TRUST EC2
-      # =========================================================
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      - name: 🔐 Trust EC2 host
+      - name: Build image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ${{ env.APP_NAME }}:scan
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+          provenance: false
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.APP_NAME }}:scan
+          scanners: vuln
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+  # =========================================================================
+  # PUSH: Promote image from dev/staging ECR → prod ECR (cross-account)
+  # Pulls by digest, re-pushes to prod account.
+  # =========================================================================
+  promote-image:
+    name: 🔄 Promote Image to Prod ECR
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: prod
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      prod_image: ${{ steps.push.outputs.prod_image }}
+      deploy_tag: ${{ steps.push.outputs.deploy_tag }}
+    steps:
+      # --- Source: dev/staging account (pull) ---
+      - name: Configure AWS creds (dev/staging account - SOURCE)
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.SRC_AWS_REGION }}
+          role-session-name: prod-promote-source
+
+      - name: Login to source ECR (dev/staging)
+        id: src-login
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
+
+      - name: Resolve source image digest
+        id: src
+        env:
+          SOURCE_TAG_INPUT: ${{ inputs.image_tag }}
         run: |
+          SOURCE_TAG="${SOURCE_TAG_INPUT:-staging-latest}"
+          REGISTRY="${{ steps.src-login.outputs.registry }}"
+          SRC_IMAGE="${REGISTRY}/${SRC_ECR_REPOSITORY}"
 
-          mkdir -p ~/.ssh
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$SRC_ECR_REPOSITORY" \
+            --image-ids imageTag="$SOURCE_TAG" \
+            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || echo "")
 
-          chmod 700 ~/.ssh
-
-          ssh-keyscan -H \
-            "${{ secrets.EC2_HOST_PROD }}" \
-            >> ~/.ssh/known_hosts
-
-          chmod 644 ~/.ssh/known_hosts
-
-
-      # =========================================================
-      # CREATE RELEASE DIRECTORY
-      # =========================================================
-
-      - name: 📁 Prepare release directory
-        run: |
-
-          ssh \
-            -o ConnectTimeout=10 \
-            ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
-
-
-      # =========================================================
-      # RSYNC DIRECTLY TO DEV EC2
-      #
-      # The publish directory is copied directly from the current
-      # runner to EC2.
-      #
-      # NO GitHub artifact.
-      # =========================================================
-
-      - name: 📡 Sync application to Dev EC2
-        id: rsync
-        run: |
-
-          START=$(date +%s)
-
-
-          rsync \
-            -az \
-            --delete \
-            --exclude='.git' \
-            --exclude='*.pdb' \
-            --exclude='*.xml' \
-            --timeout=30 \
-            --stats \
-            "${{ env.PUBLISH_DIR }}/" \
-            "ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/" \
-            2>&1 | tee rsync.log
-
-
-          EXIT_CODE=${PIPESTATUS[0]}
-
-
-          END=$(date +%s)
-
-
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo "❌ Rsync failed"
-            exit "$EXIT_CODE"
-          fi
-
-
-          TRANSFERRED=$(
-            grep \
-              "Total transferred file size" \
-              rsync.log |
-            awk '{print $5, $6}' ||
-            echo "N/A"
-          )
-
-
-          {
-            echo "### 📡 File Transfer"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| ✅ Status | Success |"
-            echo "| 📦 Transferred | $TRANSFERRED |"
-            echo "| ⏱️ Duration | $((END - START))s |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-
-      # =========================================================
-      # VERIFY REMOTE SHA
-      # =========================================================
-
-      - name: 🔎 Verify application on server
-        run: |
-
-          REMOTE_SHA=$(
-            ssh \
-              -o ConnectTimeout=10 \
-              ubuntu@${{ secrets.EC2_HOST_PROD }} \
-              "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null | tr -d '[:space:]' || echo NOT_FOUND"
-          )
-
-
-          echo "Expected SHA: ${{ env.COMMIT_SHA }}"
-          echo "Remote SHA:   $REMOTE_SHA"
-
-
-          if [ "$REMOTE_SHA" != "${{ env.COMMIT_SHA }}" ]; then
-
-            echo "❌ Remote SHA mismatch"
-
-            echo "===== Remote directory ====="
-
-            ssh \
-              ubuntu@${{ secrets.EC2_HOST_DEV }} \
-              "ls -la /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/"
-
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::Source image ${SRC_IMAGE}:${SOURCE_TAG} not found. Staging must publish it first."
             exit 1
           fi
 
+          CONCRETE_TAG=$(aws ecr describe-images \
+            --repository-name "$SRC_ECR_REPOSITORY" \
+            --image-ids imageDigest="$DIGEST" \
+            --query 'imageDetails[0].imageTags' --output json \
+            | jq -r '.[] | select(. != "dev-latest" and . != "staging-latest" and . != "prod-latest") | .' \
+            | head -n1)
 
-          echo "✅ Remote SHA verified: $REMOTE_SHA"
-
-
-      # =========================================================
-      # DEPLOY
-      # =========================================================
-
-      - name: 🔄 Swap deployment slot
-        run: |
-
-          ssh \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=4 \
-            -o ConnectTimeout=10 \
-            ubuntu@${{ secrets.EC2_HOST_PROD }} \
-            "bash /var/www/Nomaos/deploy-prod.sh ${{ env.COMMIT_SHA }}"
-
-
-          echo "✅ Slot swap complete"
-
-
-      # =========================================================
-      # HEALTH CHECK
-      # =========================================================
-
-      - name: ❤️ Health check
-        id: health
-        run: |
-
-          echo "⏳ Waiting 15 seconds for service to stabilise..."
-
-          sleep 15
-
-
-          for i in $(seq 1 10); do
-
-            HTTP_CODE=$(
-              curl \
-                -s \
-                -o /dev/null \
-                -w "%{http_code}" \
-                --max-time 5 \
-                https://noma-api.nomaos.com/health/ready ||
-              echo "000"
-            )
-
-
-            if [ "$HTTP_CODE" = "200" ]; then
-
-              echo "✅ Healthy (attempt $i) — HTTP $HTTP_CODE"
-
-              printf 'health_status=healthy\n' \
-                >> "$GITHUB_OUTPUT"
-
-              exit 0
-
-            fi
-
-
-            echo "[$i/10] HTTP $HTTP_CODE — retrying in 10s..."
-
-            sleep 10
-
-          done
-
-
-          printf 'health_status=unhealthy\n' \
-            >> "$GITHUB_OUTPUT"
-
-
-          echo "❌ Health check failed after 10 attempts"
-
-          exit 1
-        continue-on-error: true
-
-
-      # =========================================================
-      # DEPLOYMENT SUMMARY
-      # =========================================================
-
-      - name: 📋 Deployment Summary
-        if: always()
-        env:
-          HEALTH: ${{ steps.health.outputs.health_status }}
-          VERSION: ${{ steps.version.outputs.value }}
-        run: |
-
-          HEALTH_ICON=$(
-            [ "$HEALTH" = "healthy" ] &&
-              echo "✅" ||
-              echo "❌"
-          )
-
+          DEPLOY_TAG="${CONCRETE_TAG:-$SOURCE_TAG}"
 
           {
-            echo "## 🚀 Deployment Summary"
+            echo "src_image=${SRC_IMAGE}"
+            echo "src_registry=${REGISTRY}"
+            echo "source_tag=${SOURCE_TAG}"
+            echo "digest=${DIGEST}"
+            echo "deploy_tag=${DEPLOY_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pull source image by digest
+        run: |
+          docker pull "${{ steps.src.outputs.src_image }}@${{ steps.src.outputs.digest }}"
+          docker tag  "${{ steps.src.outputs.src_image }}@${{ steps.src.outputs.digest }}" \
+                      "promotion-staging:${{ steps.src.outputs.deploy_tag }}"
+
+      # --- Destination: prod account (push) ---
+      - name: Configure AWS creds (prod account - DESTINATION)
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.PROD_AWS_ROLE_ARN }}
+          aws-region: ${{ env.PROD_AWS_REGION }}
+          role-session-name: prod-promote-dest
+
+      - name: Ensure prod ECR repository exists (keep last 3)
+        run: |
+          if ! aws ecr describe-repositories --repository-names "$PROD_ECR_REPOSITORY" >/dev/null 2>&1; then
+            aws ecr create-repository --repository-name "$PROD_ECR_REPOSITORY" >/dev/null
+          fi
+          aws ecr put-lifecycle-policy --repository-name "$PROD_ECR_REPOSITORY" --lifecycle-policy-text '{
+            "rules": [{
+              "rulePriority": 1,
+              "description": "Keep only the last 3 images",
+              "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 3},
+              "action": {"type": "expire"}
+            }]
+          }' >/dev/null
+
+      - name: Login to prod ECR
+        id: prod-login
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
+
+      - name: Trivy scan before promotion
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: promotion-staging:${{ steps.src.outputs.deploy_tag }}
+          scanners: vuln
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      - name: Re-tag and push to prod ECR
+        id: push
+        run: |
+          PROD_REGISTRY="${{ steps.prod-login.outputs.registry }}"
+          PROD_IMAGE="${PROD_REGISTRY}/${PROD_ECR_REPOSITORY}"
+          DEPLOY_TAG="${{ steps.src.outputs.deploy_tag }}"
+
+          docker tag "promotion-staging:${DEPLOY_TAG}" "${PROD_IMAGE}:${DEPLOY_TAG}"
+          docker tag "promotion-staging:${DEPLOY_TAG}" "${PROD_IMAGE}:prod-latest"
+
+          docker push "${PROD_IMAGE}:${DEPLOY_TAG}"
+          docker push "${PROD_IMAGE}:prod-latest"
+
+          {
+            echo "prod_image=${PROD_IMAGE}"
+            echo "deploy_tag=${DEPLOY_TAG}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 🔄 Image Promoted to Prod ECR"
             echo ""
-            echo "| Key | Value |"
-            echo "|-----|-------|"
-            echo "| 📦 Version | \`$VERSION\` |"
-            echo "| 🔖 Commit | \`${{ env.COMMIT_SHA }}\` |"
-            echo "| 🌍 Environment | \`dev\` |"
-            echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"
-            echo "| 🕐 Deployed At | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |"
-            echo "| 🔗 URL | https://noma-api.nomaos.com/health |"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Source | \`${{ steps.src.outputs.src_image }}:${{ steps.src.outputs.source_tag }}\` |"
+            echo "| Source digest | \`${{ steps.src.outputs.digest }}\` |"
+            echo "| Prod image | \`${PROD_IMAGE}:${DEPLOY_TAG}\` |"
+            echo "| Also tagged | \`prod-latest\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # =========================================================================
+  # PUSH: Deploy to ECS in prod account
+  # =========================================================================
+  deploy-ecs:
+    name: 🚀 Deploy to ECS (prod)
+    needs: promote-image
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      # =========================================================
-      # CLEAN LOCAL FILES
-      # =========================================================
+      - name: Configure AWS creds (prod account)
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+        with:
+          role-to-assume: ${{ secrets.PROD_AWS_ROLE_ARN }}
+          aws-region: ${{ env.PROD_AWS_REGION }}
 
-      - name: 🧹 Clean runner
+      - name: Download current ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$PROD_ECS_TASK_FAMILY" \
+            --query taskDefinition > task-definition.json
+
+      - name: Render task definition with new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@a46ec7cf1073aeef99e9f03bd1aa0f8ac85bfbcb # v1.7.5
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.PROD_ECS_CONTAINER }}
+          image: ${{ needs.promote-image.outputs.prod_image }}:${{ needs.promote-image.outputs.deploy_tag }}
+
+      - name: Deploy to ECS (wait for stability)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@d13ff2810d4bdd91b47ddfb0d4bb9ea0a71acc4e # v2.3.4
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.PROD_ECS_SERVICE }}
+          cluster: ${{ env.PROD_ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      - name: External health check
+        if: vars.HEALTH_URL != ''
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null; then
+              echo "Healthy: ${{ needs.promote-image.outputs.deploy_tag }}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Health check failed: $HEALTH_URL"
+          exit 1
+
+      - name: Deploy summary
         if: always()
         run: |
-
-          rm -rf "${{ env.PUBLISH_DIR }}"
-          rm -rf ./TestResults
-
-          echo "✅ Local build files cleaned"
+          {
+            echo "## 🚀 Prod Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Target | ECS \`${PROD_ECS_CLUSTER}/${PROD_ECS_SERVICE}\` |"
+            echo "| Image | \`${{ needs.promote-image.outputs.prod_image }}:${{ needs.promote-image.outputs.deploy_tag }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

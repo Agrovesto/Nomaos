@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Admin
 {
-   
+
 
     public record UserManagementSummaryDto(int TotalUsers, int ActiveUsers, int SuspendedUsers, int PendingInvitations);
 

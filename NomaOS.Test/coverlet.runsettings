@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Coverage settings for the deployment/observability work.
+
+  Scope is deliberately narrow: only the modules this change owns
+  (Agrovesto.Backend.API.Observability.* and Agrovesto.Backend.API.Health.*)
+  are measured. Measuring the whole legacy API here would drown the 95% gate in
+  pre-existing untested controllers and make the number meaningless — the
+  repository-root coverlet.runsettings still produces the wide opencover report
+  the existing dev.yml workflow consumes, and is left untouched.
+
+  Three formats are produced: Cobertura (the CI gate parses it), LCOV (editors
+  and Codecov) and OpenCover (the only .NET coverage format SonarQube imports
+  natively, via sonar.cs.opencover.reportsPaths).
+-->
+<RunSettings>
+  <RunConfiguration>
+    <!-- Keep the run deterministic; the health matrix spins up TestServers. -->
+    <MaxCpuCount>1</MaxCpuCount>
+  </RunConfiguration>
+
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura,lcov,opencover</Format>
+
+          <Include>[Agrovesto.Backend.API]Agrovesto.Backend.API.Observability.*,[Agrovesto.Backend.API]Agrovesto.Backend.API.Health.*</Include>
+
+          <Exclude>[*]*.Migrations.*,[xunit*]*,[*Test]*,[*.Tests]*</Exclude>
+
+          <ExcludeByFile>
+            **/Migrations/**/*.cs,
+            **/obj/**/*.cs,
+            **/*.Designer.cs,
+            **/Program.cs
+          </ExcludeByFile>
+
+          <ExcludeByAttribute>
+            GeneratedCodeAttribute,
+            ExcludeFromCodeCoverageAttribute,
+            CompilerGeneratedAttribute,
+            ObsoleteAttribute
+          </ExcludeByAttribute>
+
+          <!-- Records generate Equals/GetHashCode/PrintMembers and auto-props
+               generate trivial getters; counting them would inflate the number
+               without testing anything. -->
+          <SkipAutoProps>true</SkipAutoProps>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+          <UseSourceLink>false</UseSourceLink>
+
+          <!-- Honoured by coverlet's msbuild/global-tool integrations. The
+               authoritative gate is run-tests-with-coverage.sh, which parses the
+               Cobertura report and fails the build itself, so the threshold is
+               enforced even when the collector ignores these three lines. -->
+          <Threshold>95</Threshold>
+          <ThresholdType>line,branch</ThresholdType>
+          <ThresholdStat>total</ThresholdStat>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

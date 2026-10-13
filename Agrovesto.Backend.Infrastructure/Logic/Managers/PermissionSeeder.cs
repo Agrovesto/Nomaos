@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -28,18 +29,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             ["SystemAdmin"] =
             [
                 Permissions.AdminPanel.Access, Permissions.Dashboard.View,
-                
+
             Permissions.Farmers.View, Permissions.Farmers.Manage,
             Permissions.Agents.View, Permissions.Agents.Manage,
             Permissions.Organizations.View, Permissions.Organizations.Manage,
             Permissions.Memberships.View, Permissions.Memberships.Manage,
             Permissions.ServiceProviders.View, Permissions.ServiceProviders.Manage,
-            Permissions.Users.View, Permissions.Users.Export, Permissions.Users.Manage, Permissions.Users.Invite//, Permissions.Users.Delete
+            Permissions.Users.View, Permissions.Users.Export, Permissions.Users.Manage, Permissions.Users.Invite,
+            Permissions.Roles.Manage//, Permissions.Users.Delete
             ],
             ["Super Admin"] =
             [
                 Permissions.AdminPanel.Access, Permissions.Dashboard.View,
-                
+
             Permissions.Farmers.View, Permissions.Farmers.Manage,
             Permissions.Agents.View, Permissions.Agents.Manage,
             Permissions.Organizations.View, Permissions.Organizations.Manage,
@@ -64,7 +66,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             Permissions.Memberships.View, Permissions.ServiceProviders.View
             ]
         };
-         
+
         public static async Task SeedAsync(DataContext db, CancellationToken ct = default)
         {
             // a) insert any catalog permission that isn't in the table yet
@@ -99,7 +101,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             foreach (var (roleName, names) in DefaultRoleMap)
             {
                 var role = await db.Roles.FirstOrDefaultAsync(r => r.Name == roleName, ct);
-                if (role == null) continue;
+                if (role == null || string.Equals(roleName, SuperAdminRole, StringComparison.OrdinalIgnoreCase))
+                    continue;
 
                 var alreadyHasAny = await db.RolePermissions.AnyAsync(rp => rp.RoleId == role.Id, ct);
                 if (alreadyHasAny) continue;
@@ -107,6 +110,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 db.RolePermissions.AddRange(names
                     .Where(permissionIds.ContainsKey)
                     .Select(n => new RolePermission { RoleId = role.Id, PermissionId = permissionIds[n] }));
+            }
+
+            // Existing SystemAdmin/Super Admin roles are the controlled bootstrap path for
+            // already-provisioned administrators; never create a password or account here.
+            var adminRoleNames = new[] { "SystemAdmin", SuperAdminRole };
+            var adminRoles = await db.Roles
+                .Where(role => adminRoleNames.Contains(role.Name!))
+                .ToListAsync(ct);
+            var adminAccessPermissionId = permissionIds[Permissions.AdminPanel.Access];
+
+            foreach (var role in adminRoles)
+            {
+                role.IsAvailableToAdmin = true;
+                var alreadyHasAccess = await db.RolePermissions.AnyAsync(
+                    rp => rp.RoleId == role.Id && rp.PermissionId == adminAccessPermissionId, ct);
+                var accessAlreadyTracked = db.RolePermissions.Local.Any(
+                    rp => rp.RoleId == role.Id && rp.PermissionId == adminAccessPermissionId);
+                if (!alreadyHasAccess && !accessAlreadyTracked)
+                {
+                    db.RolePermissions.Add(new RolePermission
+                    {
+                        RoleId = role.Id,
+                        PermissionId = adminAccessPermissionId
+                    });
+                }
+            }
+
+            var adminRoleIds = adminRoles.Select(role => role.Id).ToList();
+            if (adminRoleIds.Count > 0)
+            {
+                var adminUserIds = await db.UserRoles
+                    .Where(userRole => adminRoleIds.Contains(userRole.RoleId) && userRole.IsActive)
+                    .Select(userRole => userRole.UserId)
+                    .Distinct()
+                    .ToListAsync(ct);
+
+                var existingAdmins = await db.Users
+                    .Where(user => adminUserIds.Contains(user.Id) && user.IsActive)
+                    .ToListAsync(ct);
+                foreach (var user in existingAdmins)
+                {
+                    user.IsAdminUser = true;
+                    user.Status ??= AdminUserStatus.Active;
+                }
             }
 
             await db.SaveChangesAsync(ct);

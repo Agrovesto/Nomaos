@@ -26,7 +26,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
     public record UserRoleAccessDto(string RoleId, string RoleName, string? Description, IReadOnlyList<UserPermissionDto> Permissions);
     public record PermissionGroupDto(string Group, IReadOnlyList<string> Permissions);
     public record AdminUserAccessDto(IReadOnlyList<UserRoleAccessDto> Roles
-        // , 
+        // ,
         //IReadOnlyList<PermissionGroupDto> EffectivePermissions
         );
 
@@ -35,12 +35,12 @@ namespace Agrovesto.Backend.Core.Models.Admin
 
     public static class AdminActiviLogModule
     {
-        public static class AdminPanel { 
+        public static class AdminPanel {
             public const string Dashboard = "Dashboard";
             public const string UserMgt = "User Management";
             public const string Profile = "Profile";
             public const string Settings = "Settings";
         }
-        
+
     }
 }

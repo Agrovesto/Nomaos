@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -92,7 +92,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
         public string? BusinessCode { get; set; }
-        public string? Env { get; set; } = default!;
+        public string Env { get; set; } = default!;
     }
 
     public class ResetArtifact
@@ -305,7 +305,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Pin { get; set; }
         public LoginType LoginMethod { get; set; }
     }
-    
+  
     public class UserObject
     {
         public string Id { get; set; }
@@ -314,15 +314,15 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Phone_number
         { get; set; }
     }
-
     public class RefreshTokenRequest
     {
-        public string RefreshToken { get; set; }
+        public string RefreshToken { get; set; } = string.Empty;
     }
+
     public class TokenModel
     {
         public List<string> Permissions { get; set; } = new();
-        public string RefreshToken { get; set; }
+        public string? RefreshToken { get; set; }
         public DateTime RefreshTokenExpiresOn { get; set; }
         public string Token { get; set; }
         public TokenType TokenType { get; set; }

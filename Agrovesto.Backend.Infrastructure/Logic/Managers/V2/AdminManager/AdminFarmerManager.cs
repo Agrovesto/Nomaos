@@ -482,7 +482,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                                     select new
                                     {
                                         m.Name,
-                                        //fc.Role, 
+                                        //fc.Role,
                                         fc.JoinedOn,
                                         fc.IsActive
                                     })
@@ -722,7 +722,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 rng.GetBytes(randomBytes);
             }
             return new string(randomBytes.Select(b => validChars[b % validChars.Length]).ToArray());
-        }   
+        }
         private static string GenerateRandomFourDigitsPin() =>
             RandomNumberGenerator.GetInt32(1000, 10000).ToString();
 
@@ -772,7 +772,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             return errors;
         }
 
-      
+
         private async Task<(bool status, FarmerModel data)> CreateFarmerOrFails(
        AdminCreateFarmerRequest model,
        AdminOnBoardingArgs args,
@@ -839,7 +839,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         }
 
 
-      
+
 
         private static OnboardingRequestModel BuildUserCreationModel(AdminCreateFarmerRequest model)
         {
@@ -867,7 +867,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         {
             try
             {
-                await _audit.LogAsync("CreateFarmer", args.OnboardedByUserId, user.Id, JsonConvert.SerializeObject(model), 
+                await _audit.LogAsync("CreateFarmer", args.OnboardedByUserId, user.Id, JsonConvert.SerializeObject(model),
                     AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);
                 await SendDefaultCredentialChange(user, args.businessCode);
             }
@@ -918,7 +918,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         }
 
 
-   
+
         private async Task<(bool status, FarmerModel data)> CreateOrUpdateFarmer(FarmerModel farmerModel, AdminCreateFarmerRequest data, AdminOnBoardingArgs args)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -1080,8 +1080,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         {
             return ex.InnerException?.Message.Contains("IX_Farmers_UserId") == true;
         }
-        
-      
+
+
 
         private async Task UpdateFarmerValueChainItems(long farmerId, List<ValueChainSelectionDto> valueChainSelections)
         {
@@ -1258,4 +1258,3 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         #endregion createfarmer
     }
 }
-

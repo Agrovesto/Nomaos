@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsAdminUser { get; set; } = false;
         // On User (or an AdminProfile table if you'd rather not widen User)
         public string? Department { get; set; }
-        public string? AdminCode { get; set; } = default!;   // ADM000124        
+        public string? AdminCode { get; set; } = default!;   // ADM000124
         public AdminUserStatus? Status { get; set; }
         /// <summary>
         /// /admin panel
@@ -63,9 +63,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? OnboardingError { get; set; }
         public string? Salt { get; set; }
         public string? PhoneNumber { get; set; }
-        public string? Pin { get; set; } 
+        public string? Pin { get; set; }
         public string? PinEncrypt { get; set; }
-        public string? Password { get; set; }         
+        public string? Password { get; set; }
         public string UserType { get; set; }
         public string? OTP { get; set; }
         public DateTimeOffset CreatedOn { get; set; } //= DateTimeOffset.Now;
@@ -82,7 +82,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? BVN { get; set; }
         public string? Gender { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
-     
+
         public bool IsPhoneVerified { get; set; } = false;
         public bool IsEmailVerified { get; set; } = false;
 
@@ -104,8 +104,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsActive { get; set; } = true;
         public string OrganizationCode { get; set; }
     }
-   
-    
+
+
     public class OneTimePassword
     {
         public long Id { get; set; }
