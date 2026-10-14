@@ -187,6 +187,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<int>("AgentStatus")
+                        .HasColumnType("int");
+
                     b.Property<string>("BelongToBusinessCode")
                         .HasColumnType("nvarchar(max)");
 
@@ -1735,7 +1738,8 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<DateTimeOffset>("OnBoardedOn")
                         .HasColumnType("datetimeoffset");
@@ -3577,6 +3581,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("MembershipLeaderMiddleName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("MembershipStatus")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
 
@@ -3826,6 +3833,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("OrganizationPhone")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("OrganizationStatus")
+                        .HasColumnType("int");
 
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
@@ -8040,7 +8050,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("LGA");
 
                     b.Navigation("State");
-
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>

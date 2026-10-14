@@ -208,6 +208,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IAdminDashboardManager, AdminDashboardManager>();
             services.AddScoped<IAdminUserManagementManager, AdminUserManagementManager>();
             services.AddScoped<IAdminFarmerManager, AdminFarmerManager>();
+
+            services.AddScoped<IAdminOrganizationManager, AdminOrganizationManager>();
+            services.AddScoped<IAdminAgentManager, AdminAgentManager>();
+            services.AddScoped<IAdminMembershipManager, AdminMembershipManager>();
+
             services.AddScoped<IRoleAccessManager, RoleAccessManager>();
             services.AddScoped<IAdminAuditLogger, AdminAuditLogger>();
             services.AddScoped<IInputFinanceReader, EfInputFinanceReader>();

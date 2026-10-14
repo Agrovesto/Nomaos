@@ -101,6 +101,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? OnboardedById { get; set; }
         public bool IsActive { get; set; } = true;
         public Tier TierLevel { get; set; }
+        public AgentStatus AgentStatus { get; set; } = AgentStatus.Active;
 
     }
 

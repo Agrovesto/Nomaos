@@ -1113,7 +1113,7 @@ SELECT
             // Active memberships among the ones belonging to this organization.
             var totalActiveMemberships = await _context.MemberShips
                 .AsNoTracking()
-                .Where(m => membershipIdsQuery.Contains(m.Id) && m.IsActive)
+                .Where(m => membershipIdsQuery.Contains(m.Id) && m.IsActive && m.MembershipStatus == MembershipStatus.Active)
                 .CountAsync();
 
             var farmerStats = await _context.FarmerCooperatives

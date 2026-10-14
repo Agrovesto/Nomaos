@@ -33,6 +33,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IOnBoardingManager _onBoardingManager;
         private readonly IAdminDashboardManager _adminDashboardManager;
         private readonly IAdminFarmerManager _farmerManager;
+        private readonly IAdminMembershipManager _membershipManager;
+        private readonly IAdminOrganizationManager _organizationManager;
+        private readonly IAdminAgentManager _agentManager;
         public readonly IAdminUserManagementManager _adminUserManagementManager;
         private const int MaxCustomRangeDays = 366 * 5;
 
@@ -41,9 +44,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             IOnBoardingManager onBoardingManager,
             IAdminDashboardManager adminDashboardManager,
             IAdminFarmerManager farmerManager,
+            IAdminMembershipManager membershipManager,
+            IAdminOrganizationManager organizationManager,
+            IAdminAgentManager agentManager,
             IAdminUserManagementManager adminUserManagementManager) : base(httpContextAccessor)
         {
             _farmerManager = farmerManager;
+            _membershipManager = membershipManager;
+            _organizationManager = organizationManager;
+            _agentManager = agentManager;
             // _authenticationRepository = authenticationRepository;
             _onBoardingManager = onBoardingManager;
             _adminDashboardManager = adminDashboardManager;
@@ -451,6 +460,40 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
+
+
+        #region agent
+        [HttpGet("agent/list")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> ListAgents([FromQuery] AgentListQuery query)
+        {
+            query.BusinessId = RequireBusinessId();
+            var data = await _agentManager.GetAgentsAsync(query);
+            return Ok(new Response<PagedResult<AgentListItemDto>> { Succeeded = true, Data = data });
+        }
+        #endregion
+
+        #region membership
+        [HttpGet("membership/list")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> ListMemberships([FromQuery] MemberShipListQuery query)
+        {
+            query.BusinessId = RequireBusinessId();
+            var data = await _membershipManager.GetMembershipsAsync(query);
+            return Ok(new Response<PagedResult<MemberShipListItemDto>> { Succeeded = true, Data = data });
+        }
+        #endregion membership
+
+        #region organization
+        [HttpGet("organization/list")]
+        [HasPermission(Permissions.Organizations.View)]
+        public async Task<IActionResult> ListOrganizations([FromQuery] OrganizationListQuery query)
+        {
+            query.BusinessId = RequireBusinessId();
+            var data = await _organizationManager.GetOrganizationsAsync(query);
+            return Ok(new Response<PagedResult<OrganizationListItemDto>> { Succeeded = true, Data = data });
+        }
+        #endregion 
 
     }
 }
