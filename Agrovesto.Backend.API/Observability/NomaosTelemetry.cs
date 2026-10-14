@@ -25,6 +25,7 @@ public sealed class NomaosTelemetry : IDisposable
     private readonly Meter _meter;
     private readonly Counter<long> _stepCounter;
     private readonly Histogram<double> _stepDuration;
+    private readonly Histogram<long> _moneyAmount;
     private bool _disposed;
 
     public NomaosTelemetry()
@@ -46,6 +47,17 @@ public sealed class NomaosTelemetry : IDisposable
             name: "nomaos.onboarding.step.duration",
             unit: "ms",
             description: "Wall-clock duration of an onboarding step in milliseconds.");
+
+        // Money moved, in kobo, as a LONG. The .NET metrics SDK has no decimal
+        // instrument type, and a double would silently round the smallest unit
+        // of a currency this service lends in — an ALIGNED_BUCKETS-class bug you
+        // only notice while reconciling. Histogram rather than Summary so the
+        // p95 of a disbursement is computable after the fact and aggregation
+        // across replicas stays correct.
+        _moneyAmount = _meter.CreateHistogram<long>(
+            name: "nomaos.money.amount",
+            unit: "{kobo}",
+            description: "Value of money movements in kobo (1/100 NGN), by operation and outcome.");
     }
 
     public ActivitySource ActivitySource => _activitySource;
@@ -82,6 +94,45 @@ public sealed class NomaosTelemetry : IDisposable
 
         _stepCounter.Add(1, tags);
         _stepDuration.Record(elapsedMilliseconds, tags);
+    }
+
+    /// <summary>
+    /// Records the size of a money movement (loan disbursement, repayment,
+    /// wallet transfer) next to the step that performed it.
+    ///
+    /// Two rules, both load-bearing:
+    ///
+    /// 1. <b>Never throws.</b> This sits on payment paths. Telemetry must not
+    ///    turn a working transfer into a failed one, so a bad amount is
+    ///    relabelled rather than raised — the event still reaches Prometheus and
+    ///    stays greppable in Grafana instead of vanishing.
+    /// 2. <b>Two tags only.</b> No tenant, farmer, wallet or loan id: a
+    ///    per-organization label on a money histogram multiplies the series count
+    ///    by the number of cooperatives and eventually costs more in Prometheus
+    ///    RAM than the alerts are worth. Those dimensions belong on the span,
+    ///    where they are per-trace rather than per-series.
+    /// </summary>
+    public void RecordMoney(string operation, string outcome, long amountKobo)
+    {
+        var normalisedOperation = string.IsNullOrWhiteSpace(operation) ? "unknown" : operation.Trim();
+        var normalisedOutcome = string.IsNullOrWhiteSpace(outcome) ? "unknown" : outcome.Trim();
+
+        if (amountKobo < 0)
+        {
+            // A negative "amount moved" is a call-site bug (a refund should be
+            // its own operation, not a sign flip). Recorded as zero under an
+            // "invalid" outcome so the series shows it happened.
+            normalisedOutcome = "invalid";
+            amountKobo = 0;
+        }
+
+        var tags = new TagList
+        {
+            { "nomaos.money.operation", normalisedOperation },
+            { "nomaos.outcome", normalisedOutcome },
+        };
+
+        _moneyAmount.Record(amountKobo, tags);
     }
 
     /// <summary>
