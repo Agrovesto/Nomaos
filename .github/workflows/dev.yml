@@ -5,6 +5,7 @@ on:
     branches: [dev]
   push:
     branches: [dev]
+  workflow_dispatch:
 
 concurrency:
   group: "dev-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}"
@@ -315,13 +316,13 @@ jobs:
           if-no-files-found: ignore
 
   # =========================================================================
-  # PUSH to dev: Build & Push image to dev/staging ECR account
+  # PUSH or manually rebuild dev: Publish an x86_64 image for the EC2 staging host
   # (No deploy here — staging workflow pulls and deploys)
   # =========================================================================
   build-and-push:
     name: 🚀 Build & Push to ECR (dev/staging account)
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04-arm
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: staging
     permissions:
@@ -401,7 +402,7 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short_sha }}
@@ -417,8 +418,8 @@ jobs:
             PR_AUTHOR=${{ steps.meta.outputs.pr_author }}
             PR_APPROVERS=${{ steps.meta.outputs.pr_approvers }}
           provenance: false
-          cache-from: type=gha,scope=arm64
-          cache-to: type=gha,scope=arm64,mode=max
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
 
       - name: Trivy scan on pushed image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
