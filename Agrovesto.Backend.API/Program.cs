@@ -68,9 +68,12 @@ builder.Host.UseSerilog(
     writeToProviders: true);
 
 
+//var vaultUrl = "https://dev-vault.agrovesto.com"; //local
+
+//var roleId = "69d8526c-0bf6-56c8-40cd-8e8b37c213b4"; //local
+//var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
 
 
-/**
 if (!builder.Environment.IsDevelopment())
 {
 var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
@@ -101,7 +104,7 @@ var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
             vaultMount
         );
     }
-}**/
+}
 
 
 
@@ -133,7 +136,7 @@ Log.Information(
 // make the smoke test assert on a container that died for the wrong reason.
 var databaseConfigured = !string.IsNullOrWhiteSpace(
     builder.Configuration.GetConnectionString("DefaultConnection"));
-Console.WriteLine($"Database configured: {builder.Configuration.GetConnectionString("DefaultConnection")}");
+
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
