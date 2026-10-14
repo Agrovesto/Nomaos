@@ -74,7 +74,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
-        Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, FarmerUpdateModel update);
+        Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, string businessCode,FarmerUpdateModel update);
         Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId, NotificationUserRole role);
@@ -2752,9 +2752,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         };
 
 
-        public async Task<FarmerUpdateResultDto> UpdateFarmerProfile(string userId, FarmerUpdateModel update)
+        public async Task<FarmerUpdateResultDto> UpdateFarmerProfile(string userId, string businessCode, FarmerUpdateModel update)
         {
-            var r = await UpdateProfileAsync(ProfileRole.Farmer, new OnBoardingArgs { UserId = userId }, farmerUpdate: update);
+            var r = await UpdateProfileAsync(ProfileRole.Farmer, new OnBoardingArgs { UserId = userId, businessCode=businessCode }, farmerUpdate: update);
 
             return new FarmerUpdateResultDto
             {

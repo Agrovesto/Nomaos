@@ -318,7 +318,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long Id { get; set; }
         public long OrganizationId { get; set; }
     public string? Env { get; set; }
-        public string userType { get; set; }
+        public string? userType { get; set; }
         public string? UserId { get; set; }
         public string? AgentUserId { get; set; }
         public string? MembershipUserId { get; set; }
