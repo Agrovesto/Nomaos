@@ -212,13 +212,19 @@ jobs:
         run: dotnet restore "${{ env.SOLUTION_PATH }}"
 
       - name: SonarQube begin
+        shell: bash
         run: |
-          VERSION=$(dotnet msbuild Agrovesto.Backend.API/Agrovesto.Backend.API.csproj -getProperty:Version 2>/dev/null || echo "0.0.0")
+          VERSION="$(dotnet msbuild Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+            -getProperty:Version 2>/dev/null || true)"
+          VERSION="${VERSION:-0.0.0}"
+
+          echo "Using SonarQube project version: ${VERSION}"
+
           dotnet sonarscanner begin \
             /k:"${SONAR_PROJECT}" \
+            /v:"${VERSION}" \
             /d:sonar.host.url="${SONAR_HOST_URL}" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.projectVersion="${VERSION:-0.0.0}" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/coverage/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/coverage/**/*.trx" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.md,**/wwwroot/**" \
@@ -228,6 +234,7 @@ jobs:
         run: dotnet build "${{ env.SOLUTION_PATH }}" -c Release --no-restore
 
       - name: Test with coverage
+        id: tests
         run: |
           dotnet test "${{ env.TEST_PROJECT }}" -c Release --no-build \
             --logger "trx;LogFileName=test-results.trx" \
@@ -245,8 +252,8 @@ jobs:
           scanMetadataReportFile: .sonarqube/out/.sonar/report-task.txt
 
       - name: Publish test results
+        if: always() && steps.tests.outcome != 'skipped'
         uses: dorny/test-reporter@v1
-        if: always()
         with:
           name: Dev Test Results
           path: 'coverage/**/*.trx'
