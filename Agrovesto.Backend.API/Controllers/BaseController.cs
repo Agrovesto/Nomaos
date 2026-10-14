@@ -23,9 +23,9 @@ namespace Agrovesto.Backend.API.Controllers
     //[ApiController]
     //[Authorize]
     // [ValidateModelFilter]
-   
-    
-    
+
+
+
     public class BaseController : ControllerBase, IAsyncActionFilter
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -53,14 +53,14 @@ namespace Agrovesto.Backend.API.Controllers
         }
         protected IActionResult? DetermineRoleViewAccess(SubscriptionQueryFilter filter)
         {
-            // Organization is never itself a selectable "view" role 
+            // Organization is never itself a selectable "view" role
             // only count the other roles as candidates.
             var eligibleRoles = new List<string>();
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase))
                 eligibleRoles.Add(UserType.Agent.ToString());
 
-            
+
             if (CurrentUserRoles.Contains("MemberShip", StringComparer.OrdinalIgnoreCase))
                 eligibleRoles.Add(UserType.MemberShip.ToString());
 
@@ -73,9 +73,9 @@ namespace Agrovesto.Backend.API.Controllers
 
             // No eligible roles at all (e.g. pure Organization user, or no roles)
             if (eligibleRoles.Count == 0)
-                return null; 
+                return null;
 
-           
+
             if (eligibleRoles.Count == 1 && string.IsNullOrWhiteSpace(suppliedRole))
             {
                 filter.CurrentLoggedInUserRole = eligibleRoles[0];
@@ -400,9 +400,9 @@ namespace Agrovesto.Backend.API.Controllers
             TryReadJwt()?
                 .Claims.FirstOrDefault(x => x.Type.Equals("PhoneNumber", StringComparison.OrdinalIgnoreCase))
                 ?.Value;
-     
-        
-        
+
+
+
         public string? CurrentUserRole
         {
             get
@@ -463,17 +463,53 @@ namespace Agrovesto.Backend.API.Controllers
                 }
             }
         }
+        // Raw claim value (string)
+        private string? CurrentBusinessIdRaw =>
+            TryReadJwt()?
+                .Claims.FirstOrDefault(x => x.Type.Equals("BusinessId", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+
+        // Typed, nullable: null if the claim is missing or not a valid number
+        public long? CurrentBusinessId =>
+            long.TryParse(CurrentBusinessIdRaw, out var id) ? id : null;
+
+        // For endpoints that can't work without it
+        protected long RequireBusinessId()
+        {
+            var id = CurrentBusinessId;
+            if (id is null)
+                throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
+            return id.Value;
+        }
+        private string? CurrentBusinessCodeRaw =>
+            TryReadJwt()?
+                .Claims.FirstOrDefault(x => x.Type.Equals("BusinessCode", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
+
+        // Typed, nullable: null if the claim is missing or not a valid number
+        public string? CurrentBusinessCode =>
+            CurrentBusinessCodeRaw;
+
+        // For endpoints that can't work without it
+        protected string RequireBusinessCode()
+        {
+            var code = CurrentBusinessCode;
+
+            if (code is null)
+                throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
+            return code;
+        }
         public string Token
         {
             get
             {
                 if (_httpContextAccessor.HttpContext?.Request.Headers.TryGetValue(HeaderNames.Authorization, out var tokenValues) == true)
                 {
-                    var token = tokenValues.ToString().Trim(); 
+                    var token = tokenValues.ToString().Trim();
 
                     if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        return token.Substring("Bearer ".Length).Trim(); 
+                        return token.Substring("Bearer ".Length).Trim();
                     }
                 }
                 return string.Empty;

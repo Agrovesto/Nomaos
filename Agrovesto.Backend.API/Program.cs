@@ -19,9 +19,11 @@ using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
@@ -36,6 +38,7 @@ using System.Reflection;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using VaultSharp;
 using VaultSharp.Extensions.Configuration;
 using VaultSharp.V1.AuthMethods.AppRole;
@@ -211,6 +214,16 @@ builder.Services.AddIdentity<User, Role>(opt =>
 //.AddUserManager<UserManager<User>>()
 .AddEntityFrameworkStores<DataContext>()
 .AddDefaultTokenProviders();
+
+// The admin merge makes AspNetUserRoles business-scoped; Identity's stock EF store
+// does not populate the required BusinessId or understand the three-column key.
+builder.Services.AddScoped<IUserStore<User>, BusinessScopedUserStore>();
+
+builder.Services.AddOptions<AdminPanelOptions>()
+    .Bind(builder.Configuration.GetSection("AdminPanel"))
+    .Validate(o => o.BusinessId > 0 && !string.IsNullOrWhiteSpace(o.PortalBaseUrl),
+        "AdminPanel:BusinessId and AdminPanel:PortalBaseUrl must be configured.");
+
 builder.Services.AddAppServices(builder.Configuration);
 
 builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
@@ -274,6 +287,22 @@ builder.Services.Configure<FormOptions>(o =>
 });
 QuestPDF.Settings.License = LicenseType.Community;
 
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("admin-login", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            }));
+});
 
 builder.Services.AddControllers().AddJsonOptions(opts =>
 {
@@ -431,6 +460,21 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+if (databaseConfigured)
+{
+    try
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+        await Agrovesto.Backend.Infrastructure.Logic.Managers.PermissionSeeder.SeedAsync(db);
+    }
+    catch (Exception ex)
+    {
+        // Missing/unapplied admin-panel migrations should not take down the core API.
+        Log.Error(ex, "Admin permission seeding failed; verify the database migrations and role data.");
+    }
+}
+
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
 app.UseForwardedHeaders();
 
@@ -455,6 +499,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
 app.UseRouting();
+app.UseRateLimiter();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Probe surface: /health/live (self only), /health/ready (SQL + Redis + Vault),
