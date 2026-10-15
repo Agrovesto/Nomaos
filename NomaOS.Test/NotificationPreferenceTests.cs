@@ -22,7 +22,7 @@ public class NotificationPreferenceTests
     }
 
     private static OnboardingRepository CreateRepository(DataContext context) =>
-        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance, null!);
+        new(context, null!, null!, null!, null!, NullLogger<OnboardingRepository>.Instance, null!, null!);
 
     private static NotificationPreferenceRequest AllEnabled() => new()
     {

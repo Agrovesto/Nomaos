@@ -41,7 +41,7 @@ public class ChangePasswordTests
 
     private static OnboardingRepository CreateRepository(DataContext context, UserManager<User> userManager) =>
      new(context, CreateSignInManager(userManager), null!, null!, userManager,
-         NullLogger<OnboardingRepository>.Instance, null!);
+         NullLogger<OnboardingRepository>.Instance, null!, null!);
 
     private static User BuildUser() => new()
     {
