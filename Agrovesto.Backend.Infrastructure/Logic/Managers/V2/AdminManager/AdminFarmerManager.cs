@@ -45,6 +45,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<FarmerOrgMembershipDto?> GetOrganizationMembershipAsync(long businessId, string farmerUserId);
         Task<FarmerModel> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update);
         Task<(bool status, string msg, string?[] errors)> CreateFarmerAsync(AdminCreateFarmerRequest model, AdminOnBoardingArgs args, CancellationToken ct);
+        Task<bool> ReactivateFarmerAsync(long businessId, string farmerUserId, string actingUserId, string? reason);
+        Task<InputFinanceSummaryDto?> GetInputFinanceSummaryAsync(long businessId, string farmerUserId);
+        Task<PagedResult<InputFinancePackageDto>?> GetInputFinancePackagesAsync(long businessId, string farmerUserId, int page = 1, int pageSize = 20);
     }
     public class AdminFarmerManager : IAdminFarmerManager
     {
@@ -299,7 +302,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 Status = status,
                 Organization = orgNames.Count > 0 ? string.Join(", ", orgNames) : null,
                 RegistrationDate = d.OnBoardedOn,
-                CanSuspend = d.FarmerStatus != FarmerStatus.Suspended,
+                CanBeSuspended = d.FarmerStatus != FarmerStatus.Suspended,
 
                 Personal = new FarmerPersonalInfoDto
                 {
@@ -308,7 +311,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     PhoneNumber = FormatPhone(d.PhoneNumber ?? d.UserPhone),
                     Gender = d.Gender,
                     DateOfBirth = FormatDob(d.DateOfBirth),
-                    NationalId = d.Nin,
+                    NIN = d.Nin,
                     Address = d.Location,
                     State = d.State,
                     Lga = d.Lga,
@@ -342,6 +345,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             farmer.FarmerStatus = FarmerStatus.Suspended;
             farmer.User.DateModified = DateTimeOffset.UtcNow;   // drives "Last Updated"
             farmer.User.ModifiedBy = actingUserId;
+            
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        public async Task<bool> ReactivateFarmerAsync(long businessId, string farmerUserId, string actingUserId, string? reason)
+        {
+            // Needs tracking, so don't use the AsNoTracking base query
+            var farmer = await _context.Farmers
+                .Include(f => f.User)
+                .Where(f => f.UserId == farmerUserId &&
+                    _context.UserBusinesses.Any(ub =>
+                        ub.UserId == f.UserId && ub.BusinessId == businessId && ub.IsActive))
+                .FirstOrDefaultAsync();
+
+            if (farmer == null || farmer.FarmerStatus == FarmerStatus.Active)
+                return false;
+
+            farmer.FarmerStatus = FarmerStatus.Active;
+            farmer.User.DateModified = DateTimeOffset.UtcNow;   // drives "Last Updated"
+            farmer.User.ModifiedBy = actingUserId;
 
             await _context.SaveChangesAsync();
             return true;
@@ -368,27 +392,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .Select(g => new
                 {
                     Total = g.Count(),
-                    Land = g.Sum(x => x.SizeInHectares),
-                    Verified = g.Count(x => x.MappingStatus == MappingStatus.Verified)
+                    Land = g.Sum(x => x.FarmSize),
+                    Verified = g.Count(x => x.MappingStatus == MappingStatus.Verified && ( x.IsSizeVerified || x.IsDocumentVerified || x.IsMappingVerified))
                 })
                 .FirstOrDefaultAsync();
 
             // Crops ranked by land under cultivation, top 3
-            var crops = await farms
-                .Where(x => x.PrimaryCrop != null && x.PrimaryCrop != "")
-                .GroupBy(x => x.PrimaryCrop!)
-                .Select(g => new { Crop = g.Key, Land = g.Sum(x => x.SizeInHectares) })
-                .OrderByDescending(x => x.Land)
+            //var crops = await farms
+            //    .Where(x => x.PrimaryCrop != null && x.PrimaryCrop != "")
+            //    .GroupBy(x => x.PrimaryCrop!)
+            //    .Select(g => new { Crop = g.Key, Land = g.Sum(x => x.SizeInHectares) })
+            //    .OrderByDescending(x => x.Land)
+            //    .Take(3)
+            //    .Select(x => x.Crop)
+            //    .ToListAsync();
+
+             // Crops = the farmer's selected value-chain items (not the farms' PrimaryCrop)
+            var primaryValueChainss = await _context.FarmerValueChainItems.AsNoTracking()
+                .Where(v => v.FarmerId == farmer.Id)
+                // .Where(v => v.ValueChainType == "Crop")   // uncomment to exclude Animal / Aquaculture
+                .GroupBy(v => v.ItemName)                    // guards against duplicate selections
+                .Select(g => new { ItemName = g.Key, FirstId = g.Min(x => x.Id) })
+                .OrderBy(x => x.FirstId)                     // selection order (insert order)
                 .Take(3)
-                .Select(x => x.Crop)
+                .Select(x => x.ItemName)
                 .ToListAsync();
 
             return new FarmSummaryDto
             {
                 TotalFarms = stats?.Total ?? 0,
-                TotalLandSizeHectares = Math.Round(stats?.Land ?? 0, 1),
+                TotalLandSizeHectares =stats?.Land ?? 0,//Math.Round(stats?.Land ?? 0, 1),
                 VerifiedFarms = stats?.Verified ?? 0,
-                PrimaryCrops = crops
+                PrimaryValueChains = primaryValueChainss
             };
         }
 
@@ -419,7 +454,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     x.Name,
                     x.FarmState,
                     x.FarmLga,
-                    x.SizeInHectares,
+                    x.FarmSize,
                     x.PrimaryCrop,
                     x.MappingStatus
                 })
@@ -427,13 +462,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             var items = rows.Select((r, i) => new FarmListItemDto
             {
-                SerialNo = (page - 1) * pageSize + i + 1,
-                Id = r.Id,
-                FarmId = $"FM{r.Id:D6}",
+                //  SerialNo = (page - 1) * pageSize + i + 1,
+                FarmId = r.Id,
+               
                 FarmName = r.Name,
                 State = r.FarmState,
                 Lga = r.FarmLga,
-                SizeInHectares = r.SizeInHectares,
+                SizeInHectares = r.FarmSize,
                 PrimaryCrop = r.PrimaryCrop,
                 Status = r.MappingStatus.ToString()
             }).ToList();
@@ -482,6 +517,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                                     select new
                                     {
                                         m.Name,
+                                        m.Id,
+                                        m.UserId,
                                         //fc.Role,
                                         fc.JoinedOn,
                                         fc.IsActive
@@ -493,7 +530,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 Organizations = orgRows.Select(x => new LinkedOrganizationDto
                 {
                     Organization = x.CompanyName,
-                    OrganizationId = x.OrganizationCode,
+                    OrganizationCode = x.OrganizationCode,
                     JoinedOn = x.OnBoardedOn,
                     Status = x.IsActive ? "Active" : "Inactive"
                 }).ToList(),
@@ -502,18 +539,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 {
                     AgentName = x.AgentName,
                     AgentId = x.AgentCode,
-                    Phone = FormatPhone(x.Phone),
+                    PhoneNumber = //FormatPhone(
+                        x.Phone
+                     //   )
+                    ,
                     Organization = x.Organization,
                     Status = x.IsActive ? "Active" : "Inactive"
                 }).ToList(),
 
                 Memberships = memberRows.Select((x, i) => new MembershipBodyDto
                 {
-                    SerialNo = i + 1,
+                   // SerialNo = i + 1,
+                   MembershipId=x.Id,
+                   MembershipUserId=x.UserId,
                     Membership = x.Name,
                     // Role = x.Role,
                     Joined = x.JoinedOn,
-                    Status = x.IsActive
+                    Status = x.IsActive ? "Active" : "Inactive"
                     //? "Inactive" : x.IsVerified ? "Verified" : "Pending"
                 }).ToList()
             };
@@ -557,25 +599,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             return new PagedResult<InputFinancePackageDto>(items, total, page, pageSize);
         }
 
-        public async Task<bool> ReactivateFarmerAsync(long businessId, string farmerUserId, string actingUserId)
-        {
-            var farmer = await _context.Farmers
-                .Include(f => f.User)
-                .Where(f => f.UserId == farmerUserId &&
-                    _context.UserBusinesses.Any(ub =>
-                        ub.UserId == f.UserId && ub.BusinessId == businessId && ub.IsActive))
-                .FirstOrDefaultAsync();
-
-            if (farmer == null || farmer.FarmerStatus != FarmerStatus.Suspended)
-                return false;
-
-            farmer.FarmerStatus = FarmerStatus.Active;
-            farmer.User.DateModified = DateTimeOffset.UtcNow;
-            farmer.User.ModifiedBy = actingUserId;
-
-            await _context.SaveChangesAsync();
-            return true;
-        }
+       
 
         #region createfarmer
         public async Task<(bool status, string msg, string?[] errors)> CreateFarmerAsync(

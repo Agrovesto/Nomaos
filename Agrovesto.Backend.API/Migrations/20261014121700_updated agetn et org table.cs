@@ -27,8 +27,8 @@ namespace Agrovesto.Backend.API.Migrations
             migrationBuilder.AlterColumn<string>(
                 name: "Name",
                 table: "Farmers",
-                type: "nvarchar(50)",
-                maxLength: 50,
+                type: "nvarchar(70)",
+                maxLength: 70,
                 nullable: true,
                 oldClrType: typeof(string),
                 oldType: "nvarchar(max)",
@@ -63,8 +63,8 @@ namespace Agrovesto.Backend.API.Migrations
                 type: "nvarchar(max)",
                 nullable: true,
                 oldClrType: typeof(string),
-                oldType: "nvarchar(50)",
-                oldMaxLength: 50,
+                oldType: "nvarchar(70)",
+                oldMaxLength: 70,
                 oldNullable: true);
         }
     }

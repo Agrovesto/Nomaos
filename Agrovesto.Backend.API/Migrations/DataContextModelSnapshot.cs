@@ -1738,8 +1738,8 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(70)
+                        .HasColumnType("nvarchar(70)");
 
                     b.Property<DateTimeOffset>("OnBoardedOn")
                         .HasColumnType("datetimeoffset");
@@ -6522,6 +6522,18 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("AdminCode")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("AdminUserOfficeAddress")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("AdminUserOfficeCity")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("AdminUserOfficeState")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("BVN")
                         .HasColumnType("nvarchar(450)");
 
@@ -6651,6 +6663,10 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("PinEncrypt")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ProfileImageKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("Salt")
                         .HasColumnType("nvarchar(max)");

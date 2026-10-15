@@ -106,6 +106,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model);
         Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model);
         Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null, OrganizationUpdateModel organizationUpdate= null);
+        Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -640,7 +641,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return login;
         }
+        public async Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false)
 
+
+        {
+            return await _onboardingRepository.AdminLogout(userId, sessionId, allDevices);
+        }
         public Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
             => _onboardingRepository.AdminLogin(model, businessCode, ipAddress, userAgent);
 

@@ -38,6 +38,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IAdminAgentManager _agentManager;
         public readonly IAdminUserManagementManager _adminUserManagementManager;
         private const int MaxCustomRangeDays = 366 * 5;
+        private readonly IAdminSettingsManager _adminSettingsManager;
 
         public AdminController(IHttpContextAccessor httpContextAccessor,
           //  IAuthenticationRepository authenticationRepository,
@@ -47,18 +48,120 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             IAdminMembershipManager membershipManager,
             IAdminOrganizationManager organizationManager,
             IAdminAgentManager agentManager,
-            IAdminUserManagementManager adminUserManagementManager) : base(httpContextAccessor)
+            IAdminUserManagementManager adminUserManagementManager,
+            IAdminSettingsManager adminSettingsManager) : base(httpContextAccessor)
         {
             _farmerManager = farmerManager;
             _membershipManager = membershipManager;
             _organizationManager = organizationManager;
             _agentManager = agentManager;
+            _adminSettingsManager = adminSettingsManager;
             // _authenticationRepository = authenticationRepository;
             _onBoardingManager = onBoardingManager;
             _adminDashboardManager = adminDashboardManager;
             _adminUserManagementManager = adminUserManagementManager;
         }
 
+        #region settings
+
+        // GET api/admin/account/profile
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile(CancellationToken ct)
+            => Respond(await _adminSettingsManager.GetProfileAsync(CurrentUserId, ct), ResponseMessages.Successful);
+
+        // POST api/admin/account/profile-image   (multipart/form-data, field name: image)
+        [HttpPost("profile/image")]
+        [RequestSizeLimit(3 * 1024 * 1024)]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> ChangeProfileImage(IFormFile image, CancellationToken ct)
+        {
+            if (image is null || image.Length == 0)
+                return StatusCode(400, new Response<object>
+                {
+                    Code = AdminResponseCodes.Failed,
+                    Succeeded = false,
+                    Message = "Please select an image."
+                });
+
+            await using var stream = image.OpenReadStream();
+            return Respond(await _adminSettingsManager.UpdateProfileImageAsync(CurrentUserId, stream, image.Length, ct),
+                           "Profile image updated successfully.");
+        }
+
+        [HttpPost("settings/change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req, CancellationToken ct)
+        {
+            var result = await _adminSettingsManager.ChangePasswordAsync(
+                User.FindFirstValue(ClaimTypes.NameIdentifier)!, req, ct);
+
+            if (!result.Succeeded)
+                return StatusCode(result.StatusCode, new Response<object>()
+                {
+                    Code = AdminResponseCodes.Failed,       // your failure constant
+                    Succeeded = false,
+                    Message = result.Error
+                });
+
+            return Ok(new Response<object>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = "Changes saved successfully — The updated information has been recorded."
+            });
+        }
+
+
+        // GET api/admin/settings/personal-info
+        [HttpGet("settings/personal-info")]
+        public async Task<IActionResult> GetPersonalInfo(CancellationToken ct)
+            => Respond(await _adminSettingsManager.GetPersonalInfoAsync(CurrentUserId, ct), ResponseMessages.Successful);
+
+        // PUT api/admin/settings/personal-info
+        [HttpPut("settings/personal-info")]
+        public async Task<IActionResult> UpdatePersonalInfo([FromBody] UpdatePersonalInfoRequest req, CancellationToken ct)
+            => Respond(await _adminSettingsManager.UpdatePersonalInfoAsync(CurrentUserId, req, ct),
+                       "Changes saved successfully — The updated information has been recorded.");
+
+        private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        private IActionResult Respond<T>(AccessResult<T> r, string successMessage) =>
+            r.Succeeded
+                ? Ok(new Response<T>()
+                {
+                    Code = AdminResponseCodes.Success,
+                    Succeeded = true,
+                    Message = successMessage,
+                    Data = r.Data
+                })
+                : StatusCode(r.StatusCode, new Response<object>()
+                {
+                    Code = AdminResponseCodes.Failed,
+                    Succeeded = false,
+                    Message = r.Error
+                });
+        #endregion settings
+
+
+        [HttpPost("auth/logout")]
+        [Authorize]
+        [AllowPendingCredentialChange]
+        public async Task<IActionResult> AdminLogout([FromBody] AdminLogoutModel? model)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier); // use whatever BuildClaims sets for user id
+            var sessionId = User.FindFirstValue("SessionId");
+
+            if (string.IsNullOrWhiteSpace(userId) || User.FindFirstValue("portal") != "admin")
+                return Unauthorized();
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.AdminLogout(userId, sessionId, model?.AllDevices ?? false),
+                _ => Ok(new Response<object>
+                {
+                    Code = AdminResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Logged out successfully"
+                }));
+        }
         [HttpPost("auth/login")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
@@ -88,6 +191,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     {
                         AdminLoginStatus.Success => Ok(response),
                         AdminLoginStatus.InvalidCredentials => Unauthorized(response),   // 401
+                        AdminLoginStatus.TooManyAttempts => StatusCode(StatusCodes.Status429TooManyRequests, response),
                         _ => StatusCode(StatusCodes.Status403Forbidden, response)        // inactive / no admin access
                     };
                 });
@@ -237,6 +341,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("invitations/accept")]
         public async Task<IActionResult> Accept([FromBody] AcceptInviteRequest req, CancellationToken ct)
         {
+            var unmet = PasswordPolicy.Validate(req.Password);
+            if (unmet.Count > 0)
+                return Failure(400, string.Join(" ", unmet));
+
+
             var result = await _adminUserManagementManager.AcceptAsync(req, ct);
 
             if (!result.Success)
@@ -266,6 +375,25 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> Deactivate(string adminId, CancellationToken ct)
         {
             var result = await _adminUserManagementManager.DeactivateUserAsync(
+                adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+
+            if (result.Data is null)
+                return Failure(result.StatusCode, result.Error);
+
+            return Ok(new Response<AdminUserStatusDto>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = "User deactivated successfully.",
+                Data = result.Data
+            });
+        }
+        // POST api/admin/users/{adminId}/reactivate
+        [HttpPost("user/{adminId}/reactivate")]
+        [HasPermission(Permissions.Users.Manage)]
+        public async Task<IActionResult> Reactivate(string adminId, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.ReactivateUserAsync(
                 adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
 
             if (result.Data is null)
@@ -385,15 +513,33 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("farmer/{userId}/suspend")]
         [HasPermission(Permissions.Farmers.Manage)]
-        public async Task<IActionResult> Suspend(string userId, [FromBody] SuspendFarmerRequest request)
+        public async Task<IActionResult> Suspend(string userId
+            //, 
+           // [FromBody] SuspendFarmerRequest request
+            )
         {
-            request.BusinessId = RequireBusinessId();
+            var BusinessId = RequireBusinessId();
             var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var ok = await _farmerManager.SuspendFarmerAsync(request.BusinessId, userId, actingUserId, request.Reason);
+            var ok = await _farmerManager.SuspendFarmerAsync(BusinessId, userId, actingUserId, null);
 
             return ok
-                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer suspended." })
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer account suspended." })
                 : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already suspended." });
+        }
+        [HttpPost("farmer/{userId}/reactivate")]
+        [HasPermission(Permissions.Farmers.Manage)]
+        public async Task<IActionResult> Reactivate(string userId
+            //, 
+           // [FromBody] SuspendFarmerRequest request
+            )
+        {
+            var BusinessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var ok = await _farmerManager.ReactivateFarmerAsync(BusinessId, userId, actingUserId, null);
+
+            return ok
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer account reactivated." })
+                : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already active." });
         }
 
         [HttpGet("farmer/{userId}/farms/summary")]
@@ -461,6 +607,30 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+        [HttpGet("farmer/{userId}/inputfinance/summary")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinanceSummaryAsync(string userId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetInputFinanceSummaryAsync(businessId, userId);
+            if (data == null)
+                return NotFound(new Response<InputFinanceSummaryDto> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<InputFinanceSummaryDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/{userId}/inputfinance")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinancePackagesAsync(string userId,
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetInputFinancePackagesAsync(businessId, userId, page, pageSize);
+            if (data == null)
+                return NotFound(new Response<PagedResult<InputFinancePackageDto>> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<PagedResult<InputFinancePackageDto>> { Succeeded = true, Data = data });
+        }
 
         #region agent
         [HttpGet("agent/list")]

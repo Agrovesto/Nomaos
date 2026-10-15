@@ -219,7 +219,10 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IClientInfoProvider, ClientInfoProvider>();
             services.AddScoped<IPermissionService, PermissionService>();
             services.AddSingleton<IPermissionCacheInvalidator, PermissionCacheInvalidator>();
+            services.AddScoped<IAdminSettingsManager, AdminSettingsManager>();
 
+            services.Configure<ProfileImageOptions>(configuration.GetSection("ProfileImages"));
+            services.AddSingleton<IProfileImageStore, S3ProfileImageStore>();
         }
     }
 }

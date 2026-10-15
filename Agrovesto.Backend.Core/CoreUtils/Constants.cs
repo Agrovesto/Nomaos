@@ -31,6 +31,7 @@ namespace Agrovesto.Backend.Core.CoreUtils
             public const string ParameterValidation = "Agrovesto-012";
             public const string OrganizationSelectionRequired = "Agrovesto-013";
             public const string RoleSelectionRequired = "Agrovesto-014";
+            public const string ValidationError = "Agrovesto-015";
         }
 
         public static class RedisKey

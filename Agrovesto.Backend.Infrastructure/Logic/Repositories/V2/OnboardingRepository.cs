@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
@@ -31,6 +32,7 @@ using System.Net.NetworkInformation;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using FarmerPersonalInfoDto = Agrovesto.Backend.Core.Models.Businesses.FarmerPersonalInfoDto;
 
@@ -80,6 +82,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<Role> GetRoleAsync(string roleName);
         Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work);
         Task<UserModel> OnUpdateUserProfileAsync(string userId, ProfileRequestModel model, string modifiedBy = null);
+        Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -90,12 +93,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private readonly IConfiguration _configuration;
         private readonly ILogger<OnboardingRepository> _log;
         private readonly IClientInfoProvider _client;
+        private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache;
+        private const int MaxFailedAdminLogins = 5;
+        private static readonly TimeSpan AdminLoginLockWindow = TimeSpan.FromMinutes(15);
+
+        private sealed class FailedLoginCounter { public int Count; }
+
+        // Throttle key is per-account-per-IP so one attacker cannot lock out the real user from elsewhere.
+        private static string AdminLoginKey(string email, string? ip) =>
+            $"admin-login-fail:{email.ToLowerInvariant()}|{ip ?? "unknown"}";
+
         public OnboardingRepository(DataContext context,
             SignInManager<User> signInManager,
 
         IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
-            ILogger<OnboardingRepository> log, IClientInfoProvider client)
+            ILogger<OnboardingRepository> log, IClientInfoProvider client,
+            Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
         {
+            _cache = cache;
             _userManager = userManager;
             _roleManager = roleManager;
             _context = context;
@@ -138,7 +153,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     .SetProperty(token => token.RevokedOn, DateTime.UtcNow)
                     .SetProperty(token => token.RevokedReason, "Logout"));
         }
+        public async Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false)
+        {
+            const string reason = "Logged out";
 
+            var query = _context.RefreshTokens
+                .Where(t => t.UserId == userId && t.IsAdminSession && t.RevokedOn == null);
+
+            if (!allDevices)
+            {
+                if (string.IsNullOrWhiteSpace(sessionId))
+                    return true; // nothing to revoke, treat as already logged out
+
+                query = query.Where(t => t.FamilyId == sessionId);
+            }
+
+            await query.ExecuteUpdateAsync(update => update
+                .SetProperty(t => t.RevokedOn, DateTime.UtcNow)
+                .SetProperty(t => t.RevokedReason, reason));
+
+            return true;
+        }
         public async Task<AdminLoginResult> AdminLogin(
             AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
         {
@@ -149,18 +184,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             var email = model.Email.Trim();
+            var throttleKey = AdminLoginKey(email, ipAddress);
+            if (_cache.TryGetValue(throttleKey, out var existing) &&
+                existing is FailedLoginCounter { Count: >= MaxFailedAdminLogins })
+            {
+                return AdminLoginResult.Fail(AdminLoginStatus.TooManyAttempts, AdminMessages.TooManyAttempts);
+            }
+
             var user = await _userManager.FindByEmailAsync(email);
             user ??= await _userManager.FindByNameAsync(email);
 
             // Keep unknown users and bad passwords indistinguishable to callers.
             if (user is null || !await _userManager.CheckPasswordAsync(user, model.Password))
             {
+                var entry = _cache.GetOrCreate(throttleKey, e =>
+                {
+                    e.AbsoluteExpirationRelativeToNow = AdminLoginLockWindow;
+                    return new FailedLoginCounter();
+                })!;
+                Interlocked.Increment(ref entry.Count);
+
                 if (user is not null)
                     await RecordAdminLoginHistoryAsync(user.Id, false, "Invalid credentials", ipAddress, userAgent);
 
                 return AdminLoginResult.Fail(AdminLoginStatus.InvalidCredentials, AdminMessages.InvalidCredentials);
             }
 
+            _cache.Remove(throttleKey);
             if (!user.IsAdminUser)
             {
                 await RecordAdminLoginHistoryAsync(user.Id, false, "No admin account", ipAddress, userAgent);
@@ -347,23 +397,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var now = DateTime.UtcNow;
             user.LastLoginDate = now;
 
-            var modules = await _context.BusinessLicenseModules
-                .Where(x => x.BusinessLicense.BusinessId == activeBusiness.BusinessId && x.IsEnabled)
-                .Select(x => x.SystemModule.Code)
-                .ToListAsync();
-            var claims = BuildClaims(
-                user,
-                access.Roles,
-                activeBusiness,
-                new List<OrganizationDto>(),
-                hasPendingOnboarding: false,
-                modules: modules,
-                requiresCredentialChange: requiresCredentialChange);
+            var claims = BuildAdminClaims(user, activeBusiness, requiresCredentialChange);
             claims.Add(new Claim("SessionId", familyId));
             claims.Add(new Claim("portal", "admin"));
-            claims.AddRange(access.Permissions
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(permission => new Claim(AdminPermissions.ClaimType, permission)));
 
             var accessExpiry = now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
             var accessToken = GenerateJwtToken(claims, accessExpiry);
@@ -536,6 +572,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user;
         }
+
+         // Admin tokens carry identifiers only; PII, roles and permissions are resolved server-side.
+         private static List<Claim> BuildAdminClaims(
+            User user, UserBusiness activeBusiness, bool requiresCredentialChange) => new()
+         {
+             new Claim(JwtRegisteredClaimNames.Sub, user.Id),
+             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+             new Claim(ClaimTypes.NameIdentifier, user.Id),
+             new Claim("BusinessId", activeBusiness.BusinessId.ToString()),
+             new Claim("BusinessCode", activeBusiness.Business?.BusinessCode ?? ""),
+             new Claim("RequiresCredentialChange", requiresCredentialChange.ToString())
+         };
 
          private List<Claim> BuildClaims(
         User user,
