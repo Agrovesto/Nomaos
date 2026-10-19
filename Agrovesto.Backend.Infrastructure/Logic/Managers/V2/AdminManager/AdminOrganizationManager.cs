@@ -102,7 +102,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 Status = EnumExtensions.GetDisplayName(r.OrganizationStatus),
             }).ToList();
 
-            return new PagedResult<OrganizationListItemDto>(items, total, page, size);
+            return new PagedResult<OrganizationListItemDto>(items,  page, size, total);
         }
 
     }

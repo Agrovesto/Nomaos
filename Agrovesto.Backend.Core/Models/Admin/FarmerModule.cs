@@ -9,8 +9,22 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Admin
 {
-    internal class FarmerModule
+    public class FarmerWalletSummaryDto
     {
+        public decimal TotalWalletBalance { get; set; }
+        public decimal PendingSettlement { get; set; }
+        public decimal TotalInflow { get; set; }
+        public decimal TotalOutflow { get; set; }
+    }
+
+    public class FarmerWalletModule
+    {
+        public string UserId { get; set; }
+        public long WalletId { get; set; }
+        public string WalletName { get; set; }
+        public decimal CurrentBalance { get; set; }
+        public long WalletProviderId { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
     }
 
     public class FarmerListQuery
@@ -23,6 +37,8 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public DateTimeOffset? To { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 20;
+        public string? BusinessCode { get; set; }
+        public string? UserId { get; set; }
     }
 
     public class FarmerSummaryDto

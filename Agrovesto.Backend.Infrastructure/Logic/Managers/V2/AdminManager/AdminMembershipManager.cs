@@ -110,7 +110,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 OrganizationCode = string.Join(", ", orgs[r.Id].Select(o => o.OrganizationCode).Distinct()),
             }).ToList();
 
-            return new PagedResult<MemberShipListItemDto>(items, total, page, size);
+            return new PagedResult<MemberShipListItemDto>(items,  page, size, total);
         }
 
     }

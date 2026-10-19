@@ -403,7 +403,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 Code = AdminResponseCodes.Success,
                 Succeeded = true,
-                Message = "User deactivated successfully.",
+                Message = "User reactivated successfully.",
                 Data = result.Data
             });
         }
@@ -631,6 +631,30 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(new Response<PagedResult<InputFinancePackageDto>> { Succeeded = true, Data = data });
         }
+
+
+        [HttpGet("farmer/wallets/{userId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> WalletList(string userId, [FromQuery] FarmerListQuery query)
+        {
+            query.BusinessCode = RequireBusinessCode();
+            query.UserId = userId;
+            var data = await _farmerManager.GetFarmerWallletsByUserId(query);
+            return Ok(new Response<PagedResult<FarmerWalletModule>> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/wallets/{userId}/summary")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> WalletSummary(string userId)
+        {
+            var businessCode = RequireBusinessCode();
+            var data = await _farmerManager.GetFarmerWalletSummaryAsync(userId, businessCode);
+            if (data == null)
+                return NotFound(new Response<FarmerWalletSummaryDto> { Succeeded = false, Message = "Wallet not found." });
+
+            return Ok(new Response<FarmerWalletSummaryDto> { Succeeded = true, Data = data });
+        }
+
 
         #region agent
         [HttpGet("agent/list")]

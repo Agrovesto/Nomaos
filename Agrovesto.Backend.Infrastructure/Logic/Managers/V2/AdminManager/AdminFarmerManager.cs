@@ -1,10 +1,12 @@
 ﻿
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Admin;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -48,6 +50,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<bool> ReactivateFarmerAsync(long businessId, string farmerUserId, string actingUserId, string? reason);
         Task<InputFinanceSummaryDto?> GetInputFinanceSummaryAsync(long businessId, string farmerUserId);
         Task<PagedResult<InputFinancePackageDto>?> GetInputFinancePackagesAsync(long businessId, string farmerUserId, int page = 1, int pageSize = 20);
+        Task<PagedResult<FarmerWalletModule>> GetFarmerWallletsByUserId(FarmerListQuery args);
+        Task<FarmerWalletSummaryDto> GetFarmerWalletSummaryAsync(string userId, string businessCode);
     }
     public class AdminFarmerManager : IAdminFarmerManager
     {
@@ -190,7 +194,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 OrganizationCode = string.Join(", ", orgs[r.Id].Select(o => o.OrganizationCode).Distinct()),
             }).ToList();
 
-            return new PagedResult<FarmerListItemDto>(items, total, page, size);
+            return new PagedResult<FarmerListItemDto>(items, page, size, total);
         }
 
         // ---------- Export: same filters, no paging ----------
@@ -1280,5 +1284,76 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         }
 
         #endregion createfarmer
+
+        #region farmerwallet
+        public async Task<PagedResult<FarmerWalletModule>> GetFarmerWallletsByUserId(FarmerListQuery args)
+        {
+            args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+            args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
+
+            var query = _context.UserWallets
+                .Where(uw =>
+                    uw.UserId == args.UserId &&
+                    uw.BelongToBusinessCode == args.BusinessCode &&
+                    !uw.IsDeleted);
+
+            var totalRecords = await query.CountAsync();
+
+            var wallets = await query
+                .OrderByDescending(x => x.Id)
+                .Skip((args.PageNumber - 1) * args.PageSize)
+                .Take(args.PageSize)
+                .Select(uw => new FarmerWalletModule
+                {
+                    WalletId = uw.Id,
+                    UserId = uw.UserId,
+                    WalletName = uw.WalletProvider.Name,
+                    CurrentBalance = uw.WalletBalance,
+                    DateAdded = uw.AddedOn,
+                    WalletProviderId = uw.WalletProviderId,
+
+                })
+                .ToListAsync();
+
+            return new PagedResult<FarmerWalletModule>(wallets, args.PageNumber, args.PageSize, totalRecords);
+       
+        }
+
+        public async Task<FarmerWalletSummaryDto> GetFarmerWalletSummaryAsync(string userId, string businessCode)
+        {
+            var q = from w in _context.UserWallets
+                    where w.UserId == userId
+                          && w.BelongToBusinessCode == businessCode
+                    join t in _context.UserWalletTransactions
+                        on w.Id equals t.UserWalletId into txns
+                    select new
+                    {
+                        totalBalance = w.WalletBalance,
+                        inflow = txns
+                            .Where(x => x.WalletTransactionType == WalletTransactionType.Credit)
+                            .Sum(x => (decimal?)x.TransactionAmount) ?? 0m,
+                        outflow = txns
+                            .Where(x => x.WalletTransactionType == WalletTransactionType.Debit)
+                            .Sum(x => (decimal?)x.TransactionAmount) ?? 0m,
+                        pendingSettlement = txns
+                            .Where(x => x.WalletTransactionStatus == WalletTransactionStatus.DebitPending
+                                     || x.WalletTransactionStatus == WalletTransactionStatus.CreditPending)
+                            .Sum(x => (decimal?)x.TransactionAmount) ?? 0m
+                    };
+
+            var result = await q.FirstOrDefaultAsync();
+
+            return new FarmerWalletSummaryDto
+            {
+                TotalWalletBalance = result?.totalBalance ?? 0m,
+                TotalInflow = result?.inflow ?? 0m,
+                TotalOutflow = result?.outflow ?? 0m,
+                PendingSettlement = result?.pendingSettlement ?? 0m
+            };
+               
+        }
+       
+        #endregion farmerwallet
+
     }
 }

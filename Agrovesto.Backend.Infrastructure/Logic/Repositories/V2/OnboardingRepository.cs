@@ -17,8 +17,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
@@ -34,6 +34,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using static Agrovesto.Backend.Infrastructure.Entities.Common.Permissions;
 using FarmerPersonalInfoDto = Agrovesto.Backend.Core.Models.Businesses.FarmerPersonalInfoDto;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
@@ -253,6 +254,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await RecordAdminLoginHistoryAsync(user.Id, false, "No admin access", ipAddress, userAgent);
                 return AdminLoginResult.Fail(AdminLoginStatus.NoAdminAccess, AdminMessages.NoAdminAccess);
             }
+            var roles = await _context.UserRoles
+         .Where(userRole => userRole.UserId == user.Id &&
+                            userRole.BusinessId == activeBusiness.BusinessId &&
+                            userRole.IsActive)
+         .Select(userRole => userRole.Role.Name!)
+         .Distinct()
+         .ToListAsync();
 
             var loginModel = new LoginModel
             {
@@ -264,7 +272,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var weak = CheckWeakCredentials(user, loginModel);
             var familyId = Guid.NewGuid().ToString("N");
             var tokens = await IssueAdminTokensAsync(
-                user, activeBusiness, weak.IsWeak, weak.Message, familyId, ipAddress, access);
+                user, activeBusiness, weak.IsWeak, weak.Message, familyId, ipAddress, access, roles);
 
             await RecordAdminLoginHistoryAsync(user.Id, true, null, ipAddress, userAgent);
 
@@ -331,7 +339,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await RevokeRefreshFamilyAsync(stored.FamilyId, "Admin permissions removed");
                 return (false, invalid, null!);
             }
-
+            var roles = await _context.UserRoles
+         .Where(userRole => userRole.UserId == user.Id &&
+                            userRole.BusinessId == activeBusiness.BusinessId &&
+                            userRole.IsActive)
+         .Select(userRole => userRole.Role.Name!)
+         .Distinct()
+         .ToListAsync();
             // Rotate atomically so two concurrent refresh requests cannot both succeed.
             var updated = await _context.RefreshTokens
                 .Where(token => token.Id == stored.Id && token.RevokedOn == null)
@@ -350,7 +364,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 : null;
             var tokens = await IssueAdminTokensAsync(
                 user, activeBusiness, stored.RequiresCredentialChange, securityNotice,
-                stored.FamilyId, ipAddress, access);
+                stored.FamilyId, ipAddress, access, roles);
 
             return (true, "Successful", tokens);
         }
@@ -392,7 +406,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             string? securityNotice,
             string familyId,
             string? ipAddress,
-            AdminAccess access)
+            AdminAccess access,
+            IList<string>? roles)
         {
             var now = DateTime.UtcNow;
             user.LastLoginDate = now;
@@ -400,6 +415,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var claims = BuildAdminClaims(user, activeBusiness, requiresCredentialChange);
             claims.Add(new Claim("SessionId", familyId));
             claims.Add(new Claim("portal", "admin"));
+            claims.AddRange(access.Permissions
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(permission => new Claim(AdminPermissions.ClaimType, permission)));
+
+            if (user.LastLoginDate.HasValue)
+                claims.Add(new Claim("LastLogin", user.LastLoginDate.Value.ToString("O")));
+
+            claims.Add(new Claim("MemberSince", user.CreatedOn.ToString("O")));
+            if (roles?.Any() == true)
+            {
+                foreach (var role in roles)
+                {
+                    claims.Add(new Claim("Roles", role));
+                }
+            }
 
             var accessExpiry = now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
             var accessToken = GenerateJwtToken(claims, accessExpiry);
@@ -581,7 +611,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
              new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
              new Claim(ClaimTypes.NameIdentifier, user.Id),
              new Claim("BusinessId", activeBusiness.BusinessId.ToString()),
-             new Claim("BusinessCode", activeBusiness.Business?.BusinessCode ?? ""),
+             new Claim("BusinessCode", activeBusiness.Business?.BusinessCode),
+             new Claim("AuthMethod", user.SignupMethod.ToString()),
+             new Claim("DisplayName", $"{user?.FirstName} {user?.LastName}"),
+             new Claim("Email", user?.Email),
+             new Claim("PhoneNumber", user?.PhoneNumber),
+             new Claim("UserType", user?.UserType),
+
              new Claim("RequiresCredentialChange", requiresCredentialChange.ToString())
          };
 
