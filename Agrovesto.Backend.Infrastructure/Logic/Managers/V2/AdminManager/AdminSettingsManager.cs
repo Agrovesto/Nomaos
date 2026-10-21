@@ -234,7 +234,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             var address = req.OfficeAddress.Trim();
             var state = req.State.Trim();
-            var city = req.City.Trim();
+            var city = req.Lga.Trim();
             string dob = null;
             string gender = null;
 
@@ -248,7 +248,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             Track("PhoneNumber", user.PhoneNumber, phone);
             Track("OfficeAddress", user.AdminUserOfficeAddress, address);
             Track("State", user.AdminUserOfficeState, state);
-            Track("City", user.AdminUserOfficeCity, city);
+            Track("Lga", user.AdminUserOfficeCity, city);
             if (!string.IsNullOrWhiteSpace(req.DateOfBirth))
             {
                 dob = req.DateOfBirth;

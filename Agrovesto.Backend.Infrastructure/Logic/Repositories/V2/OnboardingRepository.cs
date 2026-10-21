@@ -12,6 +12,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using DocumentFormat.OpenXml.Math;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
@@ -58,7 +59,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<CreateUserResult> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId, OneTimePassword otp);
        // Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model);
+        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string? ipAddress, string? userAgent);
         //Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level);
         Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified);
         Task OnCreateKYC(KYCDetails kYC);
@@ -747,7 +748,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return (false, null);
         }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
-        LoginModel model)
+        LoginModel model, string? ipAddress, string? userAgent)
         {
             var user = await ResolveUserAsync(model);
             if (user == null)
@@ -823,25 +824,52 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 modules,
                 weakCredentialResult.IsWeak
             );
+            var now = DateTime.UtcNow;
+          //  var expiration = DateTime.UtcNow.AddHours(1);
+            //var token = GenerateJwtToken(claims, expiration);
 
-            var expiration = DateTime.UtcNow.AddHours(1);
-            var token = GenerateJwtToken(claims, expiration);
+
+            var accessExpiry =  now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
+            var accessToken = GenerateJwtToken(claims, accessExpiry);
+            var rawRefreshToken = GenerateRefreshTokenValue();
+            var refreshExpiry = now.AddDays(_configuration.GetValue("JWT:RefreshTokenDays", 7));
+
+            _context.RefreshTokens.Add(new Agrovesto.Backend.Infrastructure.Entities.Common.RefreshToken
+            {
+                UserId = user.Id,
+                BusinessId = activeBusiness.BusinessId,
+                TokenHash = HashToken(rawRefreshToken),
+                FamilyId = Guid.NewGuid().ToString("N"),
+                CreatedOn = now,
+                ExpiresOn = refreshExpiry,
+                RequiresCredentialChange = weakCredentialResult.IsWeak,
+                CreatedByIp = ipAddress,
+                IsAdminSession = true
+            });
+
+            await _context.SaveChangesAsync();
+
+         
             return (true, "Successful", new TokenModel
             {
                 Id = user.Id,
                 Email = user.Email,
                 Name = user.Name,
-                ExpiresOn= expiration,
-                Token = token,
+                ExpiresOn = accessExpiry,
+                Token = accessToken,
+                RefreshToken = rawRefreshToken,
+                RefreshTokenExpiresOn = refreshExpiry,
                 Roles = roles.ToList(),
-                Organizations= organizations,
+                Organizations =organizations,
                 phone_number = user.PhoneNumber,
-                TokenType =TokenType.AccessToken,
+                TokenType = TokenType.AccessToken,                
                 BusinessCode = activeBusiness.Business.BusinessCode,
                 SecurityNotice = weakCredentialResult.Message,
                 Authmethod=user.SignupMethod.ToString(),
                 RequiresCredentialChange= weakCredentialResult.IsWeak,
-                TwoFactorEnabled= false
+                TwoFactorEnabled= false,
+                
+           
             });
         } 
         

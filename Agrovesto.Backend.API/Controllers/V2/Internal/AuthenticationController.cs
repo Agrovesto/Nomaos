@@ -290,9 +290,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var userAgent = Request.Headers["User-Agent"].ToString();
 
             return await ExecuteAsync(
-                () => _onBoardingManager.Login(model, businessCode),
+                () => _onBoardingManager.Login(model, businessCode, ip, userAgent),
                 createUser =>
                 {
                     var response = new Response<TokenModel>

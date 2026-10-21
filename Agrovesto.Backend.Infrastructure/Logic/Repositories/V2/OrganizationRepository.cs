@@ -1190,12 +1190,14 @@ SELECT
                 throw new BaseException(ExceptionType.NOTFOUND, "Organization not found");
             }
 
+
             var baseQuery =
                 from m in _context.MemberShips.AsNoTracking()
                 join om in _context.OrganizationMemberships.AsNoTracking() on m.Id equals om.MembershipId
                 join o in _context.Organizations.AsNoTracking() on om.OrganizationId equals o.OrganizationId
                 where o.OrganizationCode == organizationCode
                 select m;
+
 
             if (!string.IsNullOrWhiteSpace(query.SearchParam))
             {
@@ -1281,6 +1283,7 @@ SELECT
                     x => x.mtGroup.DefaultIfEmpty(),
                     (x, mt) => new { x.m, MembershipTypeName = mt != null ? mt.Name : null })
                 .OrderByDescending(x => x.m.OnBoardedOn)
+                .ThenBy(x=>x.m.Id)
                 .Skip((query.PageNumber - 1) * query.PageSize)
                 .Take(query.PageSize)
                 .Select(x => new

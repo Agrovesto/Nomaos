@@ -37,7 +37,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public string State { get; set; } = default!;
 
         [Required(ErrorMessage = "Please select a city."), StringLength(100)]
-        public string City { get; set; } = default!;
+        public string Lga { get; set; } = default!;
 
         public string? DateOfBirth { get; set; }
 
@@ -87,6 +87,11 @@ namespace Agrovesto.Backend.Core.Models.Admin
     public class AdminLogoutModel
     {
         public bool AllDevices { get; set; }
+    }
+    public class AdminRefreshTokenModel
+    {
+        [Required]
+        public string RefreshToken { get; set; } = string.Empty;
     }
     public class AdminLoginModel
     {

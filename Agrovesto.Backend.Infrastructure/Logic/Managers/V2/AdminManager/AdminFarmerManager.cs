@@ -301,13 +301,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             return new FarmerDetailsDto
             {
                 Id = d.Id,
-                FarmerId = $"FMR-{d.Id}",
+                FarmerId = d.UserId,//$"FMR-{d.Id}",
                 FullName = fullName,
                 Status = status,
                 Organization = orgNames.Count > 0 ? string.Join(", ", orgNames) : null,
                 RegistrationDate = d.OnBoardedOn,
                 CanBeSuspended = d.FarmerStatus != FarmerStatus.Suspended,
-
                 Personal = new FarmerPersonalInfoDto
                 {
                     FullName = fullName,

@@ -197,6 +197,52 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
         }
 
+
+        [HttpPost("auth/refresh")]
+        [AllowAnonymous]                  // the access token is expired by definition
+        [AllowPendingCredentialChange]    // weak-credential users must still be able to refresh
+        [EnableRateLimiting("admin-login")]
+        public async Task<IActionResult> AdminRefreshToken([FromBody] AdminRefreshTokenModel model)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.RefreshToken(model.RefreshToken, ip),
+                result =>
+                {
+                    if (!result.Status)
+                    {
+                        return Unauthorized(new Response<AdminLoginResponseModel>
+                        {
+                            Code = AdminResponseCodes.Failed,
+                            Succeeded = false,
+                            Message = result.Message
+                        });
+                    }
+
+                    var t = result.Response;
+                    return Ok(new Response<AdminLoginResponseModel>
+                    {
+                        Code = AdminResponseCodes.Success,
+                        Succeeded = true,
+                        Message = result.Message,
+                        Data = new AdminLoginResponseModel
+                        {
+                            Token = t.Token,
+                            TokenType = t.TokenType,
+                            ExpiresOn = t.ExpiresOn,
+                            RefreshToken = t.RefreshToken ?? string.Empty,
+                            RefreshTokenExpiresOn = t.RefreshTokenExpiresOn,
+                            TwoFactorEnabled = t.TwoFactorEnabled,
+                            RequiresCredentialChange = t.RequiresCredentialChange,
+                            SecurityNotice = t.SecurityNotice
+                        }
+                    });
+                });
+        }
         /// <summary>
         /// GET api/admin/dashboard?period=month
         /// GET api/admin/dashboard?period=custom&amp;from=2026-09-01&amp;to=2026-09-30
