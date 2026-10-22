@@ -9,6 +9,45 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Admin
 {
+
+    public class InputFinancePackageOverviewDto
+    {
+        // Package
+        public long SubscriptionId { get; set; }
+        public string PackageName { get; set; }
+        public long PackageId { get; set; }
+        public string SubscriptionStatus { get; set; }
+        public DateTimeOffset DateSubscribed { get; set; }
+        public string PackageType { get; set; }
+        public string InputProgramme { get; set; }
+        public string FinancingPeriod { get; set; }
+
+        // Subscriber (farmer)
+        public string SubscriberName { get; set; }
+        public string SubscriberId { get; set; }
+        public string PhoneNumber { get; set; }
+
+        // Financing organization
+        public string Organization { get; set; }
+        public string OrganizationCode { get; set; }
+
+        // Relationships tied to the financing organization
+        public List<MembershipDto> MembershipBodies { get; set; } = new List<MembershipDto>();
+        public List<AgentDto> Agents { get; set; } = new List<AgentDto>();
+    }
+
+    public class MembershipDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; }
+    }
+
+    public class AgentDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; }
+        public string PhoneNumber { get; set; }
+    }
     public class FarmerWalletSummaryDto
     {
         public decimal TotalWalletBalance { get; set; }
@@ -162,12 +201,43 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public DateTimeOffset? Joined { get; set; }
         public string Status { get; set; } = default!;           // Verified
     }
+    public class RepaymentBreakdownDto
+    {
+        public long Id { get; set; }
+        public long SubscriptionId { get; set; }
+        public DateTimeOffset? Date { get; set; }
+        public DateTimeOffset? DueDate { get; set; }
+        public decimal LoanAmount { get; set; }
+        public decimal AmountPaid { get; set; }
+        public string MethodOfPayment { get; set; }
+        public decimal BalanceRemaining { get; set; }
+    }
+    public class InputPackageBreakdownDto
+    {
+       
+        public long ProductId { get; set; }
+        public string ProductName { get; set; }          // product name
+        public string Unit { get; set; }               // unit of measure
+        public decimal QuantityAllocated { get; set; }          // allocated
+        public decimal QuantityFulfilled { get; set; } // disbursed so far
+        public decimal QuantityPending { get; set; }
+        public decimal UnitCost { get; set; }
+        public decimal TotalCost { get; set; }
+        public decimal FulfilledValue { get; set; }
+        public string Status { get; set; }
+    }
 
+    public enum InputItemFulfilmentStatus
+    {
+        [Display(Name = "Not Disbursed")] NotDisbursed,
+        [Display(Name = "Partially Disbursed")] PartiallyDisbursed,
+        [Display(Name = "Fulfilled")] Fulfilled
+    }
     public class InputFinanceSummaryDto
     {
         public int TotalPackages { get; set; }
         public int ActivePackages { get; set; }
-        public int TotalDisbursed { get; set; }
+        public decimal TotalDisbursed { get; set; }
         public int PendingDisbursement { get; set; }
         public decimal TotalFinancingValue { get; set; }  
         // ₦, formatted on the frontend

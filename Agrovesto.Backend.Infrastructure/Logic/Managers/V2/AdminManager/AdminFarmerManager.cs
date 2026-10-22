@@ -52,6 +52,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<PagedResult<InputFinancePackageDto>?> GetInputFinancePackagesAsync(long businessId, string farmerUserId, int page = 1, int pageSize = 20);
         Task<PagedResult<FarmerWalletModule>> GetFarmerWallletsByUserId(FarmerListQuery args);
         Task<FarmerWalletSummaryDto> GetFarmerWalletSummaryAsync(string userId, string businessCode);
+        Task<InputFinancePackageOverviewDto> GetPackageOverviewAsync(string farmerUserId, long packageId);
+        Task<List<InputPackageBreakdownDto>> GetPackageContent(string farmerUserId, long packageId, long subscriptionId);
+        Task<PagedResult<RepaymentBreakdownDto>> GetPackageRepaymentBreakdownAsync(long packageId, long subscriptionId, int pageNumber = 1, int pageSize = 20);
     }
     public class AdminFarmerManager : IAdminFarmerManager
     {
@@ -601,8 +604,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             var (items, total) = await _inputFinance.GetPackagesAsync(farmerUserId, page, pageSize);
             return new PagedResult<InputFinancePackageDto>(items, total, page, pageSize);
         }
+        public async Task<InputFinancePackageOverviewDto> GetPackageOverviewAsync(string farmerUserId, long packageId)
+        {
+            return await _inputFinance.GetPackageOverviewAsync(farmerUserId, packageId);
+        }
+        public async Task<List<InputPackageBreakdownDto>> GetPackageContent(string farmerUserId, long packageId, long subscriptionId)
+        {
+            return await _inputFinance.GetPackageContent(packageId, subscriptionId);
+        }
+        public async Task<Core.Models.Admin.PagedResult<RepaymentBreakdownDto>> GetPackageRepaymentBreakdownAsync(
+             long packageId,
+             long subscriptionId,
+             int pageNumber = 1,
+             int pageSize = 20)
+        { 
+            return await _inputFinance.GetPackageRepaymentBreakdownAsync(packageId, subscriptionId, pageNumber, pageSize);
+        }
 
-       
 
         #region createfarmer
         public async Task<(bool status, string msg, string?[] errors)> CreateFarmerAsync(

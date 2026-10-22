@@ -300,7 +300,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var stored = await _context.RefreshTokens
                 .FirstOrDefaultAsync(token => token.TokenHash == HashToken(refreshToken));
 
-            if (stored is null || !stored.IsAdminSession)
+            if (stored is null 
+                //|| !stored.IsAdminSession
+                )
                 return (false, invalid, null!);
 
             if (stored.RevokedOn is not null)

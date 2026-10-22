@@ -13,7 +13,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
     public record AdminProfileDto(
         string UserId, string AdminCode, string FullName, string? ProfileImageUrl,
         string Status, string? Department, string? AdminLevel,
-        DateTimeOffset Joined, DateTimeOffset? LastLogin,
+        DateTimeOffset Joined, DateTimeOffset? LastLogin, string? Gender, string? DateOfBirth,
         AdminWorkInfoDto WorkInfo, AdminPersonalInfoDto PersonalInfo);
 
     public record ProfileImageDto(string ProfileImageUrl);

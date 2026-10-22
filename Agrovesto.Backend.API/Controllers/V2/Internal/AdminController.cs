@@ -678,6 +678,40 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return Ok(new Response<PagedResult<InputFinancePackageDto>> { Succeeded = true, Data = data });
         }
 
+        [HttpGet("farmer/{userId}/inputfinance/{packageId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinancePackageOverviewAsync(string userId, long packageId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetPackageOverviewAsync(userId, packageId);
+            if (data == null)
+                return NotFound(new Response<InputFinancePackageOverviewDto> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<InputFinancePackageOverviewDto> { Succeeded = true, Data = data });
+        }
+        [HttpGet("farmer/{userId}/inputfinance/{packageId}/content/{subscriptionId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinancePackageContent(string userId, long packageId, long subscriptionId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetPackageContent(userId, packageId, subscriptionId);
+            if (data == null)
+                return NotFound(new Response<List<InputPackageBreakdownDto>> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<List<InputPackageBreakdownDto>> { Succeeded = true, Data = data });
+        }
+        [HttpGet("farmer/{userId}/inputfinance/{packageId}/repayment-details/{subscriptionId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetPackageRepaymentBreakdownAsync(string userId, long packageId, long subscriptionId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetPackageRepaymentBreakdownAsync(packageId, subscriptionId, pageNumber, pageSize);
+            if (data == null)
+                return NotFound(new Response<PagedResult<RepaymentBreakdownDto>> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<PagedResult<RepaymentBreakdownDto>> { Succeeded = true, Data = data });
+        }
+
 
         [HttpGet("farmer/wallets/{userId}")]
         [HasPermission(Permissions.Farmers.View)]
@@ -711,6 +745,61 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             var data = await _agentManager.GetAgentsAsync(query);
             return Ok(new Response<PagedResult<AgentListItemDto>> { Succeeded = true, Data = data });
         }
+        [HttpGet("agent/summary")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> GetSummaryAsync()
+        {
+            var businessId = RequireBusinessId();
+            var data = await _agentManager.GetSummaryAsync(businessId);
+            return Ok(new Response<AgentSummaryDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("agent/export")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> Export([FromQuery] AgentListQuery query, [FromQuery] string format = "csv")
+        {
+            query.BusinessId = RequireBusinessId();
+            var rows = await _agentManager.GetAllForExportAsync(query);
+            var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmm");
+
+            return format.Equals("xlsx", StringComparison.OrdinalIgnoreCase)
+                ? File(AgentExport.ToXlsx(rows),
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       $"agents-{stamp}.xlsx")
+                : File(AgentExport.ToCsv(rows), "text/csv", $"agents-{stamp}.csv");
+        }
+
+
+        [HttpPost("agent/create")]
+        [HasPermission(Permissions.Agents.Manage)]
+        public async Task<IActionResult> CreateAgentAsync([FromBody] AdminCreateAgentRequest model, [FromQuery] AdminOnBoardingArgs args,
+          CancellationToken ct)
+        {
+            args.businessCode = RequireBusinessCode();
+            args.OnboardedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            try
+            {
+                var result = await _agentManager.CreateAgentAsync(model, args, ct);
+                return Ok(new Response<(bool, string, string[])>
+                {
+                    Succeeded = true,
+                    Data = result,
+                    Message = result.msg,
+                    Code = result.status ? AdminResponseCodes.Success : AdminResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode((int)ex.HttpStatusCode, new
+                {
+                    status = false,
+                    message = ex.ExceptionMessage,
+                    errors = ex.Errors
+                });
+            }
+        }
+
+
         #endregion
 
         #region membership

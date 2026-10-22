@@ -87,6 +87,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
         public string UserId { get; set; }
+        public User User { get; set; }
         public string? Name { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }

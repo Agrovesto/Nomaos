@@ -121,7 +121,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     x.Department,
                     x.CreatedOn,
                     x.LastLoginDate,
-                    x.ProfileImageKey
+                    x.ProfileImageKey,
+                    x.DateOfBirth,
+                    x.Gender
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -144,7 +146,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 u.Id, u.AdminCode ?? "", fullName,
                 string.IsNullOrEmpty(u.ProfileImageKey) ? null : _images.GetUrl(u.ProfileImageKey),
                 status.ToString(), u.Department, level,
-                u.CreatedOn, u.LastLoginDate,
+                u.CreatedOn, u.LastLoginDate, u.Gender, u.DateOfBirth,
                 new AdminWorkInfoDto(u.Department, level, roles, u.CreatedOn),
                 personal.Data!));
         }
@@ -205,6 +207,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     x.AdminUserOfficeAddress,
                     x.AdminUserOfficeState,
                     x.AdminUserOfficeCity
+                 
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -271,8 +274,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 user.AdminUserOfficeState = state;
                 user.AdminUserOfficeCity = city;
 
-                user.DateOfBirth ??= dob;
-                user.Gender ??= gender;
+                user.DateOfBirth = dob;
+                user.Gender = gender;
                 user.DateModified = DateTimeOffset.UtcNow;
                 user.ModifiedBy = userId;
 
