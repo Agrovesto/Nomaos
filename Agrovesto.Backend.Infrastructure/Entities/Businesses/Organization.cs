@@ -49,6 +49,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long OrganizationId { get; set; }
 
         public string? UserId { get; set; }
+      //  public User User { get; set; }  // FK to User
 
         public string? OrganizationCode { get; set; }
 

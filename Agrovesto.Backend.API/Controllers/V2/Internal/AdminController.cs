@@ -753,6 +753,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             var data = await _agentManager.GetSummaryAsync(businessId);
             return Ok(new Response<AgentSummaryDto> { Succeeded = true, Data = data });
         }
+        [HttpGet("agent/overview-detail/{userId}")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> GetOverviewAsync(string userId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _agentManager.GetAgentOverviewAsync(userId);
+            return Ok(new Response<AgentOverviewResponse> { Succeeded = true, Data = data });
+        }
 
         [HttpGet("agent/export")]
         [HasPermission(Permissions.Agents.View)]
@@ -798,8 +806,96 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
+        [HttpGet("agent/{userId}/farmers")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> GetAgentFarmers(
+        string userId, [FromQuery] string? search, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var result = await _agentManager.GetAgentFarmersAsync(userId, search, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<AgentFarmersResponse> { Succeeded = false, Message = "Memberships not found." });
+            return Ok(new Response<AgentFarmersResponse> { Succeeded = true, Data = result });
+     
+        }
+        [HttpGet("agent/{userId}/memberships")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentMembershipsAsync(string userId)
+        {
+            
+            var data = await _agentManager.GetAgentMembershipsAsync(userId);
+            if (data == null)
+                return NotFound(new Response<AgentMembershipsResponse> { Succeeded = false, Message = "Memberships not found." });
+            return Ok(new Response<AgentMembershipsResponse> { Succeeded = true, Data = data });
+        }
+        [HttpGet("agent/{userId}/organizations")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentOrganizationsAsync(string userId)
+        {
+            var data = await _agentManager.GetAgentOrganizationsAsync(userId);
+            if (data == null)
+                return NotFound(new Response<AgentOrganizationsResponse> { Succeeded = false, Message = "Organizations not found." });
+            return Ok(new Response<AgentOrganizationsResponse> { Succeeded = true, Data = data });
+        }
+        [HttpGet("agent/{userId}/input-finance")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentInputFinanceAsync(
+        string userId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 5)
+        {
+            var result = await _agentManager.GetAgentInputFinanceAsync(userId, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<AgentInputFinanceResponse> { Succeeded = false, Message = "Input finane record not found." });
+            return Ok(new Response<AgentInputFinanceResponse> { Succeeded = true, Data = result });
+
+        }
+
+        [HttpGet("agent/{userId}/wallets")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentWallets(
+       string userId)
+        {
+            string businessCode = RequireBusinessCode();
+            var result = await _agentManager.GetAgentWalletsAsync(userId, businessCode);
+            if (result == null)
+                return NotFound(new Response<AgentWalletResponse> { Succeeded = false, Message = "Wallets not found." });
+            return Ok(new Response<AgentWalletResponse> { Succeeded = true, Data = result });
+
+        }
 
 
+        [HttpPost("agent/{userId}/suspend")]
+        [HasPermission(Permissions.Agents.Manage)]
+        public async Task<IActionResult> SuspendAgent(string userId
+         //, 
+         // [FromBody] SuspendFarmerRequest request
+         )
+        {
+            var BusinessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var ok = await _agentManager.SuspendAgentAsync(BusinessId, userId, actingUserId, null);
+
+            return ok
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Agent account suspended." })
+                : BadRequest(new Response<bool> { Succeeded = false, Message = "Agent not found or already suspended." });
+        }
+        [HttpPost("agent/{userId}/reactivate")]
+        [HasPermission(Permissions.Agents.Manage)]
+        public async Task<IActionResult> ReactivateAgent(string userId
+            //, 
+            // [FromBody] SuspendFarmerRequest request
+            )
+        {
+            var BusinessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var ok = await _agentManager.ReactivateAgentAsync(BusinessId, userId, actingUserId, null);
+
+            return ok
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Agent account reactivated." })
+                : BadRequest(new Response<bool> { Succeeded = false, Message = "Agent not found or already active." });
+        }
         #endregion
 
         #region membership

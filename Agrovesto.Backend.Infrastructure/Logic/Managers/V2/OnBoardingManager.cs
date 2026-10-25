@@ -804,6 +804,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     break;
 
                 case UserType.MemberShip:
+                    args.UserId = model.Id;
+                    args.OnboardedByUserId = model.OnboardedByUserId;
                     await UpdateCooperativeProfileAsync(model, args);
                     break;
 
@@ -1104,7 +1106,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                                 Core.Enums.ExceptionType.BAD_REQUEST,
                                 createUserResult.message);
                         }
-
+                        args.UserId = createUserResult.model.Id;
                         await ExecutePostCreationStepsAsync(
                             model,
                             args,
@@ -2680,8 +2682,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderMiddleName = model.MiddleName,
                 MembershipLeaderLastName = model.LastName,
                 MembershipLeaderGender = model.Gender,
-
-                MemberShipTypeId = model.MembershipTypeId ?? 0,
+                Tier = Tier.None.ToString(),
+                MemberShipTypeId = model.MembershipTypeId ?? 1,
              
                 OnBoardedOn = model.CreatedOn,
                 OnboardedById = args.OnboardedByUserId,

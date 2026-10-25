@@ -41,6 +41,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? MembershipLeaderMiddleName { get; set; }
         public string? MembershipLeaderLastName { get; set; }
         public string? MembershipLeaderGender { get; set; }
+        public User User { get; set; }   // FK is already MemberShip.UserId
         public string UserId { get; set; }
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]

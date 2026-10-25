@@ -294,6 +294,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             string refreshToken, string? ipAddress = null)
         {
             const string invalid = "Invalid or expired refresh token";
+            const string activeToken = "Access token still active";
             if (string.IsNullOrWhiteSpace(refreshToken))
                 return (false, invalid, null!);
 
@@ -308,7 +309,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (stored.RevokedOn is not null)
             {
                 await RevokeRefreshFamilyAsync(stored.FamilyId, "Refresh token reuse detected");
-                return (false, invalid, null!);
+                return (false, activeToken, null!);
             }
 
             if (stored.ExpiresOn <= DateTime.UtcNow)

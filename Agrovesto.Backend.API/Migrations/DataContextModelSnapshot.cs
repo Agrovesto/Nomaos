@@ -228,12 +228,14 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Ward")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Agents");
                 });
@@ -3604,7 +3606,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Ward")
                         .HasColumnType("nvarchar(max)");
@@ -3612,6 +3614,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("MemberShipTypeId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("MemberShips");
                 });
@@ -3847,13 +3851,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("UserId")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.HasKey("OrganizationId");
 
                     b.HasIndex("LgaId");
 
                     b.HasIndex("StateId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Organizations", (string)null);
                 });
@@ -7013,6 +7019,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("LogoUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -7368,6 +7377,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.Navigation("InputPackage");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Agent", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.BundleItems", b =>
@@ -7998,7 +8018,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("MemberShipType");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShipAgent", b =>
@@ -8063,9 +8091,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .WithMany()
                         .HasForeignKey("StateId");
 
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
                     b.Navigation("LGA");
 
                     b.Navigation("State");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>
