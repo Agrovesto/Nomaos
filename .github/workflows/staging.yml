@@ -46,7 +46,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
@@ -154,14 +154,14 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Resolve target instance
         id: instance
         run: |
           IDS=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=${APP_NAME}-${TARGET_ENV}" \
+            --filters "Name=tag:Name,Values=agrovesto-dev-os-apps" \
                       "Name=instance-state-name,Values=running" \
             --query "Reservations[].Instances[].InstanceId" --output text)
           COUNT=$(echo "$IDS" | wc -w)
@@ -191,9 +191,6 @@ jobs:
         run: |
           if [ "$TARGET_ENV" = "prod" ]; then ASPNET_ENV=Production; else ASPNET_ENV=Staging; fi
 
-          # Ship the entire deploy/ tree from git so the host never drifts.
-          # deploy.sh (entrypoint) factors in lib.sh + migrate/rollback/status/etc.
-          # The wrapper is POSIX sh (SSM may run it under dash); scripts run under bash.
           TAR_B64=$(tar -C deploy -czf - . | base64 -w0)
 
           SCRIPT=$(cat <<EOF
@@ -207,13 +204,21 @@ jobs:
           # Ensure scripts are executable after unpack
           chmod +x scripts/*.sh 2>/dev/null || true
 
+          # -------------------------------------------------------------
+          # Authenticate Docker against ECR on the target EC2 instance
+          # -------------------------------------------------------------
+          REGISTRY=\$(echo '${IMAGE}' | cut -d'/' -f1)
+          aws ecr get-login-password --region '${AWS_REGION}' | docker login --username AWS --password-stdin "\$REGISTRY"
+
           # Entry point — deploy.sh sources lib.sh and may call
           # migrate-data / status / rollback as part of the process.
           APP_NAME='${APP_NAME}' \
           ASPNETCORE_ENVIRONMENT='${ASPNET_ENV}' \
           AWS_REGION='${AWS_REGION}' \
           TARGET_ENV='${TARGET_ENV}' \
-            bash scripts/deploy.sh '${IMAGE}'
+            bash scripts/deploy.sh \
+              --app '${APP_NAME}' \
+              --image '${IMAGE}'
           EOF
           )
           PARAMS=$(jq -n --arg s "$SCRIPT" '{commands: [$s]}')
