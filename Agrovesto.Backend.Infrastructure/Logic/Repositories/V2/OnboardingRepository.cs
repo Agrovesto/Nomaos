@@ -435,7 +435,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }
             }
 
-            var accessExpiry = now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
+            var accessExpiry = now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 30));
             var accessToken = GenerateJwtToken(claims, accessExpiry);
             var rawRefreshToken = GenerateRefreshTokenValue();
             var refreshExpiry = now.AddDays(_configuration.GetValue("JWT:RefreshTokenDays", 7));

@@ -56,7 +56,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         private readonly IConfiguration _configuration;
         private readonly IAdminAuditLogger _audit;
         private readonly INotificationService _smsService;
-        public AdminAgentManager(DataContext context, ILogger<AdminAgentManager> log, IBusinessRepository businessRepository, IAdminAuditLogger audit,
+        public AdminAgentManager(DataContext context, ILogger<AdminAgentManager> log,
+            IBusinessRepository businessRepository, IAdminAuditLogger audit,
             IConfiguration configuration,
             IAWSService aWSService,
             INotificationService smsService, IOnboardingRepository onboardingRepository)

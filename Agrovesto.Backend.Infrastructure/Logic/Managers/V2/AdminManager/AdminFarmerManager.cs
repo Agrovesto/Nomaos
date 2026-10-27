@@ -82,6 +82,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             _audit = audit;
             _configuration = configuration;
             _email = aWSService;
+            _smsService = smsService;
         }
 
         private static readonly Expression<Func<Farmer, bool>> IsVerified =

@@ -907,6 +907,145 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             var data = await _membershipManager.GetMembershipsAsync(query);
             return Ok(new Response<PagedResult<MemberShipListItemDto>> { Succeeded = true, Data = data });
         }
+
+      
+
+        [HttpGet("membership/summary")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> GetMembershipSummaryAsync()
+        {
+            var businessId = RequireBusinessId();
+            var data = await _membershipManager.GetSummaryAsync(businessId);
+            return Ok(new Response<MemberShipSummaryDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpPost("membership/create")]
+        [HasPermission(Permissions.Memberships.Manage)]
+        public async Task<IActionResult> CreateMembershipAsync([FromBody] AdminCreateMembershipRequest model, [FromQuery] AdminOnBoardingArgs args,
+        CancellationToken ct)
+        {
+            args.businessCode = RequireBusinessCode();
+            args.OnboardedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            try
+            {
+                var result = await _membershipManager.CreateMembershipAsync(model, args, ct);
+                return Ok(new Response<(bool, string, MemberShipListItemDto)>
+                {
+                    Succeeded = true,
+                    Data = result,
+                    Message = result.msg,
+                    Code = result.status ? AdminResponseCodes.Success : AdminResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode((int)ex.HttpStatusCode, new
+                {
+                    status = false,
+                    message = ex.ExceptionMessage,
+                    errors = ex.Errors
+                });
+            }
+        }
+
+        [HttpGet("membership/members/{membershipId}")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> GetMembershipMembersAsync(long membershipId, [FromQuery] string? search, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _membershipManager.GetMembershipMembersAsync(businessId, membershipId, search, pageNumber, pageSize);
+            return Ok(new Response<MembershipMembersResponse> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("membership/{membershipId}/members")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> GetMembershipMembers(
+       long membershipId, [FromQuery] string? search, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var result = await _membershipManager.GetMembershipMembersAsync(RequireBusinessId(), membershipId, search, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<MembershipMembersResponse> { Succeeded = false, Message = "Members not found." });
+            return Ok(new Response<MembershipMembersResponse> { Succeeded = true, Data = result });
+
+        }
+
+        [HttpGet("membership/{membershipId}/organizations")]
+        [HasPermission(Permissions.Memberships.View)]
+
+        public async Task<IActionResult> GetMembershipOrganizationsAsync(long membershipId)
+        {
+            var data = await _membershipManager.GetMembershipOrganizationsAsync(RequireBusinessId(), membershipId);
+            if (data == null)
+                return NotFound(new Response<MembershipOrganizationsResponse> { Succeeded = false, Message = "Organizations not found." });
+            return Ok(new Response<MembershipOrganizationsResponse> { Succeeded = true, Data = data });
+        }
+
+
+        [HttpGet("membership/{membershipId}/agents")]
+        [HasPermission(Permissions.Memberships.View)]
+
+        public async Task<IActionResult> GetMembershipAgentsAsync(long membershipId)
+        {
+
+            var data = await _membershipManager.GetMembershipAgentsAsync(RequireBusinessId(), membershipId);
+            if (data == null)
+                return NotFound(new Response<MembershipAgentsResponse> { Succeeded = false, Message = "Agents not found." });
+            return Ok(new Response<MembershipAgentsResponse> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("membership/{membershipId}/input-finance")]
+        [HasPermission(Permissions.Memberships.View)]
+
+        public async Task<IActionResult> GetMembershipInputFinanceAsync(
+       long membershipId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 5)
+        {
+            var result = await _membershipManager.GetMembershipInputFinanceAsync(membershipId, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<InputFinanceResponse> { Succeeded = false, Message = "Input finance record not found." });
+            return Ok(new Response<InputFinanceResponse> { Succeeded = true, Data = result });
+
+        }
+        [HttpPost("membership/{membershipId}/suspend")]
+        [HasPermission(Permissions.Memberships.Manage)]
+        public async Task<IActionResult> SuspendMembership(
+      long membershipId,
+      [FromBody] SuspendMembershipRequest request,
+      CancellationToken ct = default)
+        {
+            var businessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+            var result = await _membershipManager.SuspendMembershipAsync(
+                businessId, membershipId, request?.Reason, actingUserId, ct);
+
+            return Ok(new Response<MembershipStatusChangeResult>
+            {
+                Succeeded = true,
+                Data = result,
+                Message = result.Message
+            });
+        }
+
+        [HttpPost("membership/{membershipId}/reactivate")]
+        [HasPermission(Permissions.Memberships.Manage)]
+        public async Task<IActionResult> ReactivateMembership(
+            long membershipId,
+            CancellationToken ct = default)
+        {
+            var businessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+            var result = await _membershipManager.ReactivateMembershipAsync(
+                businessId, membershipId, actingUserId, ct);
+
+            return Ok(new Response<MembershipStatusChangeResult>
+            {
+                Succeeded = true,
+                Data = result,
+                Message = result.Message
+            });
+        }
+
         #endregion membership
 
         #region organization
