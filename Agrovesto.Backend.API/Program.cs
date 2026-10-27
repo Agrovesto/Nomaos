@@ -17,6 +17,7 @@ using Amazon.Rekognition;
 using Amazon.S3;
 using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Hangfire;
+using Hangfire.Dashboard;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
@@ -452,6 +453,11 @@ builder.Services.AddCors(options =>
                    .AllowAnyMethod()
                    .AllowCredentials()
                    .AllowAnyHeader()
+                   // A response header a browser cannot read is not a support
+                   // affordance: CORS hides custom response headers from JS unless
+                   // they are exposed. This is what lets the web client show
+                   // "reference <id>" in an error toast.
+                   .WithExposedHeaders(CorrelationIdMiddleware.HeaderName)
                    .SetIsOriginAllowedToAllowWildcardSubdomains()
                    .Build();
         });
@@ -477,6 +483,15 @@ if (databaseConfigured)
 
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
 app.UseForwardedHeaders();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Correlation id, deliberately the first middleware of the pipeline: it must be
+// in scope before GlobalExceptionMiddleware can catch anything, and before any
+// handler logs, so one id ties the response header, every stdout line and the
+// Tempo span together. Clients may send X-Correlation-Id to span several
+// services; anything malformed is replaced, never reflected.
+// ─────────────────────────────────────────────────────────────────────────────
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -515,14 +530,35 @@ app.UseHttpsRedirection();
 
 // Enable static files for health dashboard
 app.UseStaticFiles();
-if (hangfireEnabled)
-{
-    app.UseHangfireDashboard("/hangfire");
-}
 app.UseAuthentication();
 //app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
 //app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
+
+// The dashboard lists every background job with its full serialised arguments
+// (farmer phone numbers, wallet references, KYC payloads) and offers retry /
+// trigger / delete buttons. Bare UseHangfireDashboard() means "allow anybody",
+// and it cannot be authorised any earlier than this: HttpContext.User is only
+// populated after UseAuthentication + UseAuthorization, so the same call placed
+// above them would deny every request instead.
+// Two ways in, both fail-closed: HANGFIRE_DASHBOARD_ROLES (comma-separated;
+// empty = any authenticated principal) or the HANGFIRE_DASHBOARD_EDGE_TOKEN that
+// nginx attaches after auth_basic. The token path exists because this API
+// authenticates with JWT bearer only, so a browser alone can never satisfy the
+// role check - see HangfireDashboardAuthorizationFilter for the reasoning.
+if (hangfireEnabled)
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = new[]
+        {
+            new HangfireDashboardAuthorizationFilter(
+                HangfireDashboardAuthorizationFilter.ParseRoles(
+                    builder.Configuration[HangfireDashboardAuthorizationFilter.RolesConfigurationKey]),
+                builder.Configuration[HangfireDashboardAuthorizationFilter.EdgeTokenConfigurationKey]),
+        },
+    });
+}
 
 app.MapControllers();
 
