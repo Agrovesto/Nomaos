@@ -40,6 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<AccessResult<Core.Models.Admin.PagedResult<AdminActivityDto>>> GetUserActivityAsync(string adminId, string actingUserId, int page, int pageSize, CancellationToken ct);
         Task<AccessResult<Core.Models.Admin.PagedResult<AdminLoginHistoryDto>>> GetUserLoginHistoryAsync(string adminId, string actingUserId, int page, int pageSize, CancellationToken ct);
         Task<AccessResult<AdminUserDetailDto>> UpdateUserAsync(string userId, UpdateAdminUserRequest req, string actingUserId, CancellationToken ct);
+        Task<AccessResult<AdminUserStatusDto>> ReactivateUserAsync(string adminId, string actingUserId, CancellationToken ct);
     }
     public class AdminUserManagementManager : IAdminUserManagementManager
     {
@@ -545,6 +546,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             return AccessResult.Ok(new AdminUserStatusDto(user.Id, user.Status!.Value.ToString()));
         }
 
+        public async Task<AccessResult<AdminUserStatusDto>> ReactivateUserAsync(
+            string adminId, string actingUserId, CancellationToken ct)
+        {
+            var user = await _db.Users
+                .FirstOrDefaultAsync(u => u.AdminCode == adminId && u.IsAdminUser, ct);
+            if (user is null)
+                return AccessResult.Fail<AdminUserStatusDto>(404, "User not found.");
+
+            // Safeguard: an admin should never act on their own account.
+            // (If actingUserId is an Id, keep comparing against user.Id;
+            //  if you switch it to an AdminCode, compare against user.AdminCode.)
+            if (user.Id == actingUserId)
+                return AccessResult.Fail<AdminUserStatusDto>(400, "You cannot reactivate your own account.");
+
+            if (user.Status == AdminUserStatus.Active)
+                return AccessResult.Fail<AdminUserStatusDto>(409, "This user is already active.");
+
+            if (user.Status == AdminUserStatus.Pending)
+                return AccessResult.Fail<AdminUserStatusDto>(409,
+                    "This user has not accepted their invitation yet. Revoke the invitation instead.");
+
+            if (user.Status != AdminUserStatus.Deactivated)
+                return AccessResult.Fail<AdminUserStatusDto>(409,
+                    "Only deactivated users can be reactivated.");
+
+            user.Status = AdminUserStatus.Active;
+            user.IsActive = true;                        // keep in sync; the admin login checks this
+            user.DateModified = DateTimeOffset.UtcNow;
+            user.ModifiedBy = actingUserId;
+            await _db.SaveChangesAsync(ct);
+
+            await _audit.LogAsync(
+                "UserReactivated", actingUserId, user.Id,
+                "Reactivated user account",
+                AdminActiviLogModule.AdminPanel.UserMgt,
+                $"{user.Email}", ct);
+
+            await _users.UpdateSecurityStampAsync(user); // refresh stamp so stale state is not reused
+            _cache.InvalidateAll();                      // permission checks pick up the change immediately
+
+            _log.LogInformation("Admin user {AdminId} reactivated by {ActingUserId}", adminId, actingUserId);
+
+            return AccessResult.Ok(new AdminUserStatusDto(user.Id, user.Status!.Value.ToString()));
+        }
         public async Task<AccessResult<AdminUserDetailDto>> GetUserDetailAsync(string adminId, string actingUserId, CancellationToken ct)
         {
             var u = await _db.Users.AsNoTracking()

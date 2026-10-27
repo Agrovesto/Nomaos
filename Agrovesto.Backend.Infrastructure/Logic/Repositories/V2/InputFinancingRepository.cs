@@ -838,6 +838,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 //TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
             };
         }
+       
+        
         public async Task<bool> DeactivatePackageAsync(long packageId, long organizationId)
         {
             var package = await _context.InputPackages
@@ -1643,6 +1645,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                     if (subscription.Status != SubscriptionStatus.PendingApproval)
                         throw new BaseException(ExceptionType.BAD_REQUEST, "Only pending approval subscriptions can be processed");
+                    var commitmentRequired = subscription.InputPackage.CommitmentRequired;
+
+
 
                     if (request.ApprovalState == ApprovalDecision.Rejected)
                     {
@@ -1682,15 +1687,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         return true;
                     }
 
-                    subscription.Status = subscription.InputPackage.CommitmentRequired
-                        ? SubscriptionStatus.PendingCommitment  
-                        : SubscriptionStatus.PendingDisbursement;
 
                     subscription.ApprovedByUserId = args.UserId;
                     subscription.ApprovedOn = DateTimeOffset.UtcNow;
 
                     _context.InputPackageSubscriptions.Update(subscription);
 
+                    if (commitmentRequired)
+                    {
+                        subscription.Status = SubscriptionStatus.PendingCommitment;
+                    }
+                    else
+                    {
+                        subscription.Status = SubscriptionStatus.PendingDisbursement;
+                        var reference = ReferenceUtil.GenerateDisbursementReference();
+                        await RequestInputDisbursementApprovalAsync(
+                            subscription.Id, reference, args.UserId, subscription.SubscriberUserId);
+                        // status is now PendingReleaseApproval
+                    }
                     await _context.SaveChangesAsync();
 
                     var approveEvent = new OutboxMessage
@@ -1911,9 +1925,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     x.Status == TransactionStatus.Successful)
                 .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
 
-            var fullyRepaid = !subscription.InputPackage.RepaymentRequired
-         || subscription.RepaymentValue <= 0
-         || totalRepaid >= subscription.RepaymentValue;
+            var fullyRepaid = totalRepaid >= subscription.RepaymentValue;
+      
             if (fullyRepaid 
                 //&& (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
                 //SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active)

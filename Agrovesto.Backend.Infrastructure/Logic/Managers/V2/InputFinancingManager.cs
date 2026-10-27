@@ -1256,6 +1256,7 @@ RepaymentFrequency frequency)
 
                             case "Etransact":
                                 //credit on etransact
+                                ProcessEtranzactWalletTransfer(args, debitReference, creditReference, providerParams, dbTransaction);
                                 break;
 
                             default:
@@ -1353,6 +1354,30 @@ RepaymentFrequency frequency)
                     ExceptionType.OPERATION_FAILED,
                     "Payment was debited but could not be credited to the organization. Our team has been notified to reconcile your transaction.");
             }
+        }
+        private async void ProcessEtranzactWalletTransfer(InputSubscriptionRequestArgs args, string debitReference, string creditReference, WalletProviderParameterModel[] providerParams, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction dbTransaction)
+        {
+            throw new NotImplementedException("Etranzact wallet transfer processing is not available.");
+            //var transferStatus = await _etranzactService.GetTransferStatus(
+            //    creditReference, providerParams, args.Env);
+
+            //if (transferStatus == null || !transferStatus.IsSuccess)
+            //{
+            //    var creditFailMessage = transferStatus?.Message ?? "Wallet transfer failed";
+
+            //    await _walletTransactionRepository.CompleteWalletFunding(
+            //        $"{creditReference}-CR", false, null, creditFailMessage);
+
+            //    await dbTransaction.CommitAsync();
+
+            //    await _walletTransactionRepository.FlagForReconciliation(
+            //        $"{debitReference}-DB", $"{creditReference}-CR",
+            //        $"Credit failed after successful debit: {creditFailMessage}");
+
+            //    throw new BaseException(
+            //        ExceptionType.OPERATION_FAILED,
+            //        "Payment was debited but could not be credited to the organization. Our team has been notified to reconcile your transaction.");
+            //}
         }
 
         private async Task<ProviderDebitResult> ProcessMomoWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,

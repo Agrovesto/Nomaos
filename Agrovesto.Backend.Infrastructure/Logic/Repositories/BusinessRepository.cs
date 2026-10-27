@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models;
@@ -275,7 +276,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return new BusinessOrganizationDashboardResponse
                 {
                     TotalOrganizations = totalOrgs.Count,
-                    TotalActiveOrganizations= totalOrgs.Where(x=>x.IsActive).Count(),
+                    TotalActiveOrganizations= totalOrgs.Where(x=>x.IsActive && x.OrganizationStatus == OrganizationStatus.Active).Count(),
 
                    
                     TotalEquityPaid = totalEquityPaid,

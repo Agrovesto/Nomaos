@@ -18,6 +18,38 @@ namespace Agrovesto.Backend.Core.Enums
         Deactivated = 3,
         [Display(Name = "Pending")]
         Pending = 4 }
+    public enum AgentStatus {
+
+        [Display(Name = "Active")]
+        Active = 1,
+
+        [Display(Name = "Suspended")]
+        Suspended = 2,
+
+        [Display(Name = "Deactivated")]
+        Deactivated = 3,
+
+        [Display(Name = "Pending")]
+        Pending = 4 }
+    public enum OrganizationStatus {
+        [Display(Name = "Active")]
+        Active = 1,
+        [Display(Name = "Suspended")]
+        Suspended = 2,
+        [Display(Name = "Deactivated")]
+        Deactivated = 3,
+        [Display(Name = "Pending")]
+        Pending = 4 }
+
+    public enum MembershipStatus {
+        [Display(Name = "Active")]
+        Active = 1,
+        [Display(Name = "Suspended")]
+        Suspended = 2,
+        [Display(Name = "Deactivated")]
+        Deactivated = 3,
+        [Display(Name = "Pending")]
+        Pending = 4 }
     public enum MappingStatus
     {
         UnMapped, //no coordinates added

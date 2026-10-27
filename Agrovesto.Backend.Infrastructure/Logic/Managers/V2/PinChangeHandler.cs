@@ -43,7 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             var user = await _context.Users.FirstOrDefaultAsync(x => x.PhoneNumber == model.PhoneNumber);
             if (user == null)
-                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Reset pin has been sent to your registered phone number.");
 
             return user;
         }

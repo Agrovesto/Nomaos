@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.Entities.Common;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -40,6 +41,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? MembershipLeaderMiddleName { get; set; }
         public string? MembershipLeaderLastName { get; set; }
         public string? MembershipLeaderGender { get; set; }
+        public User User { get; set; }   // FK is already MemberShip.UserId
         public string UserId { get; set; }
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -56,6 +58,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long MemberShipTypeId { get; set; }
         public MemberShipType MemberShipType { get; set; }
         public bool IsActive { get; set; } = true;
+        public MembershipStatus MembershipStatus { get; set; } = MembershipStatus.Active;   
 
     }
     public class MemberShipAgent

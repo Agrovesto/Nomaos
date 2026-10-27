@@ -66,7 +66,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<FarmerProfileDto> GetFarmerProfileAsync(string userId);
 
         Task<FarmerProfileDto> GetFarmerProfile(string userId);
-        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
+        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode, string? ipAddress, string? userAgent);
         Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent);
         Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
         Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode);
@@ -74,7 +74,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
-        Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, FarmerUpdateModel update);
+        Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, string businessCode,FarmerUpdateModel update);
         Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId, NotificationUserRole role);
@@ -106,6 +106,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model);
         Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model);
         Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null, OrganizationUpdateModel organizationUpdate= null);
+        Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -631,16 +632,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
         LoginModel model,
-        string businessCode
+        string businessCode, string? ipAddress, string? userAgent
             )
         {
             ValidateLoginModel(model);
             model.BusinessCode = businessCode;
-            var login = await _onboardingRepository.Login(model);
+            var login = await _onboardingRepository.Login(model, ipAddress, userAgent);
 
             return login;
         }
+        public async Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false)
 
+
+        {
+            return await _onboardingRepository.AdminLogout(userId, sessionId, allDevices);
+        }
         public Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
             => _onboardingRepository.AdminLogin(model, businessCode, ipAddress, userAgent);
 
@@ -798,6 +804,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     break;
 
                 case UserType.MemberShip:
+                    args.UserId = model.Id;
+                    args.OnboardedByUserId = model.OnboardedByUserId;
                     await UpdateCooperativeProfileAsync(model, args);
                     break;
 
@@ -1098,7 +1106,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                                 Core.Enums.ExceptionType.BAD_REQUEST,
                                 createUserResult.message);
                         }
-
+                        args.UserId = createUserResult.model.Id;
                         await ExecutePostCreationStepsAsync(
                             model,
                             args,
@@ -2674,8 +2682,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderMiddleName = model.MiddleName,
                 MembershipLeaderLastName = model.LastName,
                 MembershipLeaderGender = model.Gender,
-
-                MemberShipTypeId = model.MembershipTypeId ?? 0,
+                Tier = Tier.None.ToString(),
+                MemberShipTypeId = model.MembershipTypeId ?? 1,
              
                 OnBoardedOn = model.CreatedOn,
                 OnboardedById = args.OnboardedByUserId,
@@ -2752,9 +2760,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         };
 
 
-        public async Task<FarmerUpdateResultDto> UpdateFarmerProfile(string userId, FarmerUpdateModel update)
+        public async Task<FarmerUpdateResultDto> UpdateFarmerProfile(string userId, string businessCode, FarmerUpdateModel update)
         {
-            var r = await UpdateProfileAsync(ProfileRole.Farmer, new OnBoardingArgs { UserId = userId }, farmerUpdate: update);
+            var r = await UpdateProfileAsync(ProfileRole.Farmer, new OnBoardingArgs { UserId = userId, businessCode=businessCode }, farmerUpdate: update);
 
             return new FarmerUpdateResultDto
             {

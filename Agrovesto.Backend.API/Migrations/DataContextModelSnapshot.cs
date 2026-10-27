@@ -187,6 +187,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<int>("AgentStatus")
+                        .HasColumnType("int");
+
                     b.Property<string>("BelongToBusinessCode")
                         .HasColumnType("nvarchar(max)");
 
@@ -225,12 +228,14 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Ward")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Agents");
                 });
@@ -1735,7 +1740,8 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(70)
+                        .HasColumnType("nvarchar(70)");
 
                     b.Property<DateTimeOffset>("OnBoardedOn")
                         .HasColumnType("datetimeoffset");
@@ -3577,6 +3583,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("MembershipLeaderMiddleName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("MembershipStatus")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
 
@@ -3597,7 +3606,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Ward")
                         .HasColumnType("nvarchar(max)");
@@ -3605,6 +3614,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("MemberShipTypeId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("MemberShips");
                 });
@@ -3827,6 +3838,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("OrganizationPhone")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("OrganizationStatus")
+                        .HasColumnType("int");
+
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
@@ -3837,13 +3851,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("UserId")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.HasKey("OrganizationId");
 
                     b.HasIndex("LgaId");
 
                     b.HasIndex("StateId");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Organizations", (string)null);
                 });
@@ -6512,6 +6528,18 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("AdminCode")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("AdminUserOfficeAddress")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("AdminUserOfficeCity")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("AdminUserOfficeState")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("BVN")
                         .HasColumnType("nvarchar(450)");
 
@@ -6641,6 +6669,10 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("PinEncrypt")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ProfileImageKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("Salt")
                         .HasColumnType("nvarchar(max)");
@@ -6985,6 +7017,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LogoUrl")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
@@ -7342,6 +7377,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.Navigation("InputPackage");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Agent", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.BundleItems", b =>
@@ -7972,7 +8018,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("MemberShipType");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShipAgent", b =>
@@ -8037,10 +8091,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .WithMany()
                         .HasForeignKey("StateId");
 
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
                     b.Navigation("LGA");
 
                     b.Navigation("State");
 
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>

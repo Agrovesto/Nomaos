@@ -8,11 +8,91 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Admin
 {
+    public record AdminWorkInfoDto(string? Department, string? AdminLevel, IReadOnlyList<string> Roles, DateTimeOffset Joined);
+
+    public record AdminProfileDto(
+        string UserId, string AdminCode, string FullName, string? ProfileImageUrl,
+        string Status, string? Department, string? AdminLevel,
+        DateTimeOffset Joined, DateTimeOffset? LastLogin, string? Gender, string? DateOfBirth,
+        AdminWorkInfoDto WorkInfo, AdminPersonalInfoDto PersonalInfo);
+
+    public record ProfileImageDto(string ProfileImageUrl);
+
+
+    public record AdminPersonalInfoDto(
+    string? Gender, string? DateOfBirth,
+    string? PhoneNumber, 
+    //string? PhoneNumberDisplay,
+    string Email, string? OfficeAddress, string? State, string? City);
+
+    public class UpdatePersonalInfoRequest
+    {
+        [Required(ErrorMessage = "Phone number is required.")]
+        public string PhoneNumber { get; set; } = default!;
+
+        [Required(ErrorMessage = "Office address is required."), StringLength(300)]
+        public string OfficeAddress { get; set; } = default!;
+
+        [Required(ErrorMessage = "Please select a state."), StringLength(100)]
+        public string State { get; set; } = default!;
+
+        [Required(ErrorMessage = "Please select a city."), StringLength(100)]
+        public string Lga { get; set; } = default!;
+
+        public string? DateOfBirth { get; set; }
+
+        public string? Gender { get; set; }
+    }
+
+
+    public static class PasswordPolicy
+    {
+        public const int MinLength = 8;
+
+        public static List<string> Validate(string? password)
+        {
+            var p = password ?? "";
+            var unmet = new List<string>();
+
+            if (p.Length < MinLength)
+                unmet.Add("Password must be at least 8 characters long.");
+            if (!p.Any(char.IsUpper))
+                unmet.Add("Password must contain at least one uppercase letter.");
+            if (!p.Any(char.IsDigit))
+                unmet.Add("Password must contain at least one number.");
+            if (!p.Any(c => !char.IsLetterOrDigit(c) && !char.IsWhiteSpace(c)))
+                unmet.Add("Password must contain at least one special character.");
+
+            return unmet;
+        }
+    }
+
+    public class ChangePasswordRequest
+    {
+        [Required(ErrorMessage = "Current password is required.")]
+        public string CurrentPassword { get; set; } = default!;
+
+        [Required(ErrorMessage = "New password is required.")]
+        [StringLength(128, ErrorMessage = "Password must not exceed 128 characters.")]
+        public string NewPassword { get; set; } = default!;
+
+        [Required(ErrorMessage = "Please confirm your new password.")]
+        [Compare(nameof(NewPassword), ErrorMessage = "Passwords do not match.")]
+        public string ConfirmNewPassword { get; set; } = default!;
+    }
     internal class AdminAuthModel
     {
     }
 
-
+    public class AdminLogoutModel
+    {
+        public bool AllDevices { get; set; }
+    }
+    public class AdminRefreshTokenModel
+    {
+        [Required]
+        public string RefreshToken { get; set; } = string.Empty;
+    }
     public class AdminLoginModel
     {
         [Required(ErrorMessage = "Email address is required.")]
@@ -36,6 +116,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public const string NoAdminAccess = "You do not have permission to access the Admin Panel.";
         public const string Deactivated = "Your account has been deactivated. Please contact your administrator.";
         public const string Suspended = "Your account has been suspended. Please contact your administrator.";
+        public const string TooManyAttempts = "Too many failed login attempts. Please try again later.";
         public const string ServerError = "Something went wrong. Please try again.";
     }
 
@@ -57,7 +138,8 @@ namespace Agrovesto.Backend.Core.Models.Admin
         Success,
         InvalidCredentials, // -> 401
         AccountInactive,    // -> 403
-        NoAdminAccess       // -> 403
+        NoAdminAccess,      // -> 403
+        TooManyAttempts     // -> 429
     }
 
     public class AdminUserProfile

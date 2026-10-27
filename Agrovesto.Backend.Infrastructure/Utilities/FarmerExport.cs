@@ -42,7 +42,8 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
             for (int i = 0; i < rows.Count; i++)
             {
                 var r = rows[i];
-                //ws.Cell(i + 2, 1).Value = r.SerialNo;
+               var serialNo = i + 1;
+                ws.Cell(i + 2, 1).Value = serialNo;
                 ws.Cell(i + 2, 2).Value = r.FarmerId;
                 ws.Cell(i + 2, 3).Value = r.FullName;
                 ws.Cell(i + 2, 4).Value = r.PhoneNumber;      // string, so leading 0 is kept

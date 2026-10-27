@@ -15,6 +15,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string ItemName { get; set; }
 
         public Farmer Farmer { get; set; }
+
     }
 
 

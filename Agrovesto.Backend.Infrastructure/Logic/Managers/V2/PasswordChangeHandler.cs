@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                  user = await _userManager.FindByIdAsync(model.Email);
             if (user == null)
             {
-                throw new BaseException(ExceptionType.BAD_REQUEST, "The current password you entered is incorrect.");
+                throw new BaseException(ExceptionType.BAD_REQUEST, "The current details you entered are incorrect.");
             }
             return user;
         }
