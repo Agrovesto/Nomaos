@@ -9,8 +9,61 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Admin
 {
-    internal class FarmerModule
+
+    public class InputFinancePackageOverviewDto
     {
+        // Package
+        public long SubscriptionId { get; set; }
+        public string PackageName { get; set; }
+        public long PackageId { get; set; }
+        public string SubscriptionStatus { get; set; }
+        public DateTimeOffset DateSubscribed { get; set; }
+        public string PackageType { get; set; }
+        public string InputProgramme { get; set; }
+        public string FinancingPeriod { get; set; }
+
+        // Subscriber (farmer)
+        public string SubscriberName { get; set; }
+        public string SubscriberId { get; set; }
+        public string PhoneNumber { get; set; }
+
+        // Financing organization
+        public string Organization { get; set; }
+        public string OrganizationCode { get; set; }
+
+        // Relationships tied to the financing organization
+        public List<MembershipDto> MembershipBodies { get; set; } = new List<MembershipDto>();
+        public List<AgentDto> Agents { get; set; } = new List<AgentDto>();
+    }
+
+    public class MembershipDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; }
+    }
+
+    public class AgentDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; }
+        public string PhoneNumber { get; set; }
+    }
+    public class FarmerWalletSummaryDto
+    {
+        public decimal TotalWalletBalance { get; set; }
+        public decimal PendingSettlement { get; set; }
+        public decimal TotalInflow { get; set; }
+        public decimal TotalOutflow { get; set; }
+    }
+
+    public class FarmerWalletModule
+    {
+        public string UserId { get; set; }
+        public long WalletId { get; set; }
+        public string WalletName { get; set; }
+        public decimal CurrentBalance { get; set; }
+        public long WalletProviderId { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
     }
 
     public class FarmerListQuery
@@ -23,6 +76,8 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public DateTimeOffset? To { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 20;
+        public string? BusinessCode { get; set; }
+        public string? UserId { get; set; }
     }
 
     public class FarmerSummaryDto
@@ -59,7 +114,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public string Status { get; set; } = default!;
         public string? Organization { get; set; }
         public DateTimeOffset RegistrationDate { get; set; }
-        public bool CanSuspend { get; set; }                  // false when already suspended
+        public bool CanBeSuspended { get; set; }                  // false when already suspended
 
         // Overview tab
         public FarmerPersonalInfoDto Personal { get; set; } = default!;
@@ -73,7 +128,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public string? PhoneNumber { get; set; }              // +234 803 456 7821
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }              // 1st December, 1998
-        public string? NationalId { get; set; }
+        public string? NIN { get; set; }
         public string? Address { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
@@ -92,21 +147,19 @@ namespace Agrovesto.Backend.Core.Models.Admin
     public class SuspendFarmerRequest
     {
         public long BusinessId { get; set; }
-        public string? Reason { get; set; }
+        public string? Reason { get; set; } 
     }
     public class FarmSummaryDto
     {
         public int TotalFarms { get; set; }
         public double TotalLandSizeHectares { get; set; }   // 27.6, and the UI adds "Hectares"
         public int VerifiedFarms { get; set; }
-        public List<string> PrimaryCrops { get; set; } = new();  // ["Rice", "Maize", "Soybean"]
+        public List<string> PrimaryValueChains { get; set; } = new();  // ["Rice", "Maize", "Soybean"]
     }
 
     public class FarmListItemDto
     {
-        public int SerialNo { get; set; }
-        public long Id { get; set; }
-        public string FarmId { get; set; } = default!;       // FM001204
+        public long FarmId { get; set; } = default!;       // FM001204
         public string? FarmName { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
@@ -125,7 +178,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
     public class LinkedOrganizationDto
     {
         public string Organization { get; set; } = default!;     // Kaduna Rice Farmers Cooperative
-        public string OrganizationId { get; set; } = default!;   // ORG000143
+        public string OrganizationCode { get; set; } = default!;   // ORG000143
         public DateTimeOffset? JoinedOn { get; set; }
         public string Status { get; set; } = default!;           // Active / Inactive
     }
@@ -134,36 +187,74 @@ namespace Agrovesto.Backend.Core.Models.Admin
     {
         public string AgentName { get; set; } = default!;
         public string AgentId { get; set; } = default!;          // AGT00142
-        public string? Phone { get; set; }                       // +234 802 543 2198
+        public string? PhoneNumber { get; set; }                       // +234 802 543 2198
         public string? Organization { get; set; }                // which org this assignment is under
         public string Status { get; set; } = default!;
     }
 
     public class MembershipBodyDto
     {
-        public int SerialNo { get; set; }
+        public long MembershipId { get; set; }
+        public string MembershipUserId { get; set; }
         public string Membership { get; set; } = default!;
-        public string? Role { get; set; }                        // Member
+       // public string? Role { get; set; }                        // Member
         public DateTimeOffset? Joined { get; set; }
-        public bool Status { get; set; } = default!;           // Verified
+        public string Status { get; set; } = default!;           // Verified
+    }
+    public class RepaymentBreakdownDto
+    {
+        public long Id { get; set; }
+        public long SubscriptionId { get; set; }
+        public DateTimeOffset? Date { get; set; }
+        public DateTimeOffset? DueDate { get; set; }
+        public decimal LoanAmount { get; set; }
+        public decimal AmountPaid { get; set; }
+        public string MethodOfPayment { get; set; }
+        public decimal BalanceRemaining { get; set; }
+    }
+    public class InputPackageBreakdownDto
+    {
+       
+        public long ProductId { get; set; }
+        public string ProductName { get; set; }          // product name
+        public string Unit { get; set; }               // unit of measure
+        public decimal QuantityAllocated { get; set; }          // allocated
+        public decimal QuantityFulfilled { get; set; } // disbursed so far
+        public decimal QuantityPending { get; set; }
+        public decimal UnitCost { get; set; }
+        public decimal TotalCost { get; set; }
+        public decimal FulfilledValue { get; set; }
+        public string Status { get; set; }
     }
 
+    public enum InputItemFulfilmentStatus
+    {
+        [Display(Name = "Not Disbursed")] NotDisbursed,
+        [Display(Name = "Partially Disbursed")] PartiallyDisbursed,
+        [Display(Name = "Fulfilled")] Fulfilled
+    }
     public class InputFinanceSummaryDto
     {
         public int TotalPackages { get; set; }
         public int ActivePackages { get; set; }
-        public decimal TotalValue { get; set; }          // ₦, formatted on the frontend
+        public decimal TotalDisbursed { get; set; }
+        public int PendingDisbursement { get; set; }
+        public decimal TotalFinancingValue { get; set; }  
+        // ₦, formatted on the frontend
         public decimal OutstandingBalance { get; set; }  // ₦
     }
 
     public class InputFinancePackageDto
     {
-        public int SerialNo { get; set; }
-        public long Id { get; set; }
-        public string PackageId { get; set; } = default!;
+        //public int SerialNo { get; set; }
+       // public long Id { get; set; }
+        public long PackageId { get; set; } = default!;
         public string PackageName { get; set; } = default!;
+        public string SubscriptionType { get; set; } = default!;
         public string? Season { get; set; }
-        public decimal Value { get; set; }
+        public decimal TotalFinancingValue { get; set; }
+        public decimal TotalDisbursedValue { get; set; }
+        public decimal TotalOutstandingValue { get; set; }
         public string Status { get; set; } = default!;   // Active / Completed / Pending
         public DateTimeOffset? ApprovedDate { get; set; }
     }

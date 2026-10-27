@@ -43,4 +43,36 @@ namespace Agrovesto.Backend.Core.Models.Admin
         }
 
     }
+    public static class UserActiviLogModule
+    {
+        public static class FarmerPanel
+        {
+            public const string Dashboard = "Dashboard";
+            public const string UserMgt = "User Management";
+            public const string Profile = "Profile";
+            public const string Settings = "Settings";
+        }
+        public static class MembershipPanel
+        {
+            public const string Dashboard = "Dashboard";
+            public const string UserMgt = "User Management";
+            public const string Profile = "Profile";
+            public const string Settings = "Settings";
+        }
+        public static class AgentPanel
+        {
+            public const string Dashboard = "Dashboard";
+            public const string UserMgt = "User Management";
+            public const string Profile = "Profile";
+            public const string Settings = "Settings";
+        }
+        public static class OrganizationPanel
+        {
+            public const string Dashboard = "Dashboard";
+            public const string UserMgt = "User Management";
+            public const string Profile = "Profile";
+            public const string Settings = "Settings";
+        }
+
+    }
 }

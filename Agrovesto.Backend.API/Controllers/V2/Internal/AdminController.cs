@@ -33,23 +33,135 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IOnBoardingManager _onBoardingManager;
         private readonly IAdminDashboardManager _adminDashboardManager;
         private readonly IAdminFarmerManager _farmerManager;
+        private readonly IAdminMembershipManager _membershipManager;
+        private readonly IAdminOrganizationManager _organizationManager;
+        private readonly IAdminAgentManager _agentManager;
         public readonly IAdminUserManagementManager _adminUserManagementManager;
         private const int MaxCustomRangeDays = 366 * 5;
+        private readonly IAdminSettingsManager _adminSettingsManager;
 
         public AdminController(IHttpContextAccessor httpContextAccessor,
           //  IAuthenticationRepository authenticationRepository,
             IOnBoardingManager onBoardingManager,
             IAdminDashboardManager adminDashboardManager,
             IAdminFarmerManager farmerManager,
-            IAdminUserManagementManager adminUserManagementManager) : base(httpContextAccessor)
+            IAdminMembershipManager membershipManager,
+            IAdminOrganizationManager organizationManager,
+            IAdminAgentManager agentManager,
+            IAdminUserManagementManager adminUserManagementManager,
+            IAdminSettingsManager adminSettingsManager) : base(httpContextAccessor)
         {
             _farmerManager = farmerManager;
+            _membershipManager = membershipManager;
+            _organizationManager = organizationManager;
+            _agentManager = agentManager;
+            _adminSettingsManager = adminSettingsManager;
             // _authenticationRepository = authenticationRepository;
             _onBoardingManager = onBoardingManager;
             _adminDashboardManager = adminDashboardManager;
             _adminUserManagementManager = adminUserManagementManager;
         }
 
+        #region settings
+
+        // GET api/admin/account/profile
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile(CancellationToken ct)
+            => Respond(await _adminSettingsManager.GetProfileAsync(CurrentUserId, ct), ResponseMessages.Successful);
+
+        // POST api/admin/account/profile-image   (multipart/form-data, field name: image)
+        [HttpPost("profile/image")]
+        [RequestSizeLimit(3 * 1024 * 1024)]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> ChangeProfileImage(IFormFile image, CancellationToken ct)
+        {
+            if (image is null || image.Length == 0)
+                return StatusCode(400, new Response<object>
+                {
+                    Code = AdminResponseCodes.Failed,
+                    Succeeded = false,
+                    Message = "Please select an image."
+                });
+
+            await using var stream = image.OpenReadStream();
+            return Respond(await _adminSettingsManager.UpdateProfileImageAsync(CurrentUserId, stream, image.Length, ct),
+                           "Profile image updated successfully.");
+        }
+
+        [HttpPost("settings/change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req, CancellationToken ct)
+        {
+            var result = await _adminSettingsManager.ChangePasswordAsync(
+                User.FindFirstValue(ClaimTypes.NameIdentifier)!, req, ct);
+
+            if (!result.Succeeded)
+                return StatusCode(result.StatusCode, new Response<object>()
+                {
+                    Code = AdminResponseCodes.Failed,       // your failure constant
+                    Succeeded = false,
+                    Message = result.Error
+                });
+
+            return Ok(new Response<object>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = "Changes saved successfully — The updated information has been recorded."
+            });
+        }
+
+
+        // GET api/admin/settings/personal-info
+        [HttpGet("settings/personal-info")]
+        public async Task<IActionResult> GetPersonalInfo(CancellationToken ct)
+            => Respond(await _adminSettingsManager.GetPersonalInfoAsync(CurrentUserId, ct), ResponseMessages.Successful);
+
+        // PUT api/admin/settings/personal-info
+        [HttpPut("settings/personal-info")]
+        public async Task<IActionResult> UpdatePersonalInfo([FromBody] UpdatePersonalInfoRequest req, CancellationToken ct)
+            => Respond(await _adminSettingsManager.UpdatePersonalInfoAsync(CurrentUserId, req, ct),
+                       "Changes saved successfully — The updated information has been recorded.");
+
+        private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+        private IActionResult Respond<T>(AccessResult<T> r, string successMessage) =>
+            r.Succeeded
+                ? Ok(new Response<T>()
+                {
+                    Code = AdminResponseCodes.Success,
+                    Succeeded = true,
+                    Message = successMessage,
+                    Data = r.Data
+                })
+                : StatusCode(r.StatusCode, new Response<object>()
+                {
+                    Code = AdminResponseCodes.Failed,
+                    Succeeded = false,
+                    Message = r.Error
+                });
+        #endregion settings
+
+
+        [HttpPost("auth/logout")]
+        [Authorize]
+        [AllowPendingCredentialChange]
+        public async Task<IActionResult> AdminLogout([FromBody] AdminLogoutModel? model)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier); // use whatever BuildClaims sets for user id
+            var sessionId = User.FindFirstValue("SessionId");
+
+            if (string.IsNullOrWhiteSpace(userId) || User.FindFirstValue("portal") != "admin")
+                return Unauthorized();
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.AdminLogout(userId, sessionId, model?.AllDevices ?? false),
+                _ => Ok(new Response<object>
+                {
+                    Code = AdminResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Logged out successfully"
+                }));
+        }
         [HttpPost("auth/login")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
@@ -79,11 +191,58 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     {
                         AdminLoginStatus.Success => Ok(response),
                         AdminLoginStatus.InvalidCredentials => Unauthorized(response),   // 401
+                        AdminLoginStatus.TooManyAttempts => StatusCode(StatusCodes.Status429TooManyRequests, response),
                         _ => StatusCode(StatusCodes.Status403Forbidden, response)        // inactive / no admin access
                     };
                 });
         }
 
+
+        [HttpPost("auth/refresh")]
+        [AllowAnonymous]                  // the access token is expired by definition
+        [AllowPendingCredentialChange]    // weak-credential users must still be able to refresh
+        [EnableRateLimiting("admin-login")]
+        public async Task<IActionResult> AdminRefreshToken([FromBody] AdminRefreshTokenModel model)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.RefreshToken(model.RefreshToken, ip),
+                result =>
+                {
+                    if (!result.Status)
+                    {
+                        return Unauthorized(new Response<AdminLoginResponseModel>
+                        {
+                            Code = AdminResponseCodes.Failed,
+                            Succeeded = false,
+                            Message = result.Message
+                        });
+                    }
+
+                    var t = result.Response;
+                    return Ok(new Response<AdminLoginResponseModel>
+                    {
+                        Code = AdminResponseCodes.Success,
+                        Succeeded = true,
+                        Message = result.Message,
+                        Data = new AdminLoginResponseModel
+                        {
+                            Token = t.Token,
+                            TokenType = t.TokenType,
+                            ExpiresOn = t.ExpiresOn,
+                            RefreshToken = t.RefreshToken ?? string.Empty,
+                            RefreshTokenExpiresOn = t.RefreshTokenExpiresOn,
+                            TwoFactorEnabled = t.TwoFactorEnabled,
+                            RequiresCredentialChange = t.RequiresCredentialChange,
+                            SecurityNotice = t.SecurityNotice
+                        }
+                    });
+                });
+        }
         /// <summary>
         /// GET api/admin/dashboard?period=month
         /// GET api/admin/dashboard?period=custom&amp;from=2026-09-01&amp;to=2026-09-30
@@ -228,6 +387,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("invitations/accept")]
         public async Task<IActionResult> Accept([FromBody] AcceptInviteRequest req, CancellationToken ct)
         {
+            var unmet = PasswordPolicy.Validate(req.Password);
+            if (unmet.Count > 0)
+                return Failure(400, string.Join(" ", unmet));
+
+
             var result = await _adminUserManagementManager.AcceptAsync(req, ct);
 
             if (!result.Success)
@@ -267,6 +431,25 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 Code = AdminResponseCodes.Success,
                 Succeeded = true,
                 Message = "User deactivated successfully.",
+                Data = result.Data
+            });
+        }
+        // POST api/admin/users/{adminId}/reactivate
+        [HttpPost("user/{adminId}/reactivate")]
+        [HasPermission(Permissions.Users.Manage)]
+        public async Task<IActionResult> Reactivate(string adminId, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.ReactivateUserAsync(
+                adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+
+            if (result.Data is null)
+                return Failure(result.StatusCode, result.Error);
+
+            return Ok(new Response<AdminUserStatusDto>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = "User reactivated successfully.",
                 Data = result.Data
             });
         }
@@ -376,15 +559,33 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("farmer/{userId}/suspend")]
         [HasPermission(Permissions.Farmers.Manage)]
-        public async Task<IActionResult> Suspend(string userId, [FromBody] SuspendFarmerRequest request)
+        public async Task<IActionResult> Suspend(string userId
+            //, 
+           // [FromBody] SuspendFarmerRequest request
+            )
         {
-            request.BusinessId = RequireBusinessId();
+            var BusinessId = RequireBusinessId();
             var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var ok = await _farmerManager.SuspendFarmerAsync(request.BusinessId, userId, actingUserId, request.Reason);
+            var ok = await _farmerManager.SuspendFarmerAsync(BusinessId, userId, actingUserId, null);
 
             return ok
-                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer suspended." })
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer account suspended." })
                 : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already suspended." });
+        }
+        [HttpPost("farmer/{userId}/reactivate")]
+        [HasPermission(Permissions.Farmers.Manage)]
+        public async Task<IActionResult> Reactivate(string userId
+            //, 
+           // [FromBody] SuspendFarmerRequest request
+            )
+        {
+            var BusinessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var ok = await _farmerManager.ReactivateFarmerAsync(BusinessId, userId, actingUserId, null);
+
+            return ok
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Farmer account reactivated." })
+                : BadRequest(new Response<bool> { Succeeded = false, Message = "Farmer not found or already active." });
         }
 
         [HttpGet("farmer/{userId}/farms/summary")]
@@ -451,6 +652,410 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
+
+        [HttpGet("farmer/{userId}/inputfinance/summary")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinanceSummaryAsync(string userId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetInputFinanceSummaryAsync(businessId, userId);
+            if (data == null)
+                return NotFound(new Response<InputFinanceSummaryDto> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<InputFinanceSummaryDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/{userId}/inputfinance")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinancePackagesAsync(string userId,
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetInputFinancePackagesAsync(businessId, userId, page, pageSize);
+            if (data == null)
+                return NotFound(new Response<PagedResult<InputFinancePackageDto>> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<PagedResult<InputFinancePackageDto>> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/{userId}/inputfinance/{packageId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinancePackageOverviewAsync(string userId, long packageId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetPackageOverviewAsync(userId, packageId);
+            if (data == null)
+                return NotFound(new Response<InputFinancePackageOverviewDto> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<InputFinancePackageOverviewDto> { Succeeded = true, Data = data });
+        }
+        [HttpGet("farmer/{userId}/inputfinance/{packageId}/content/{subscriptionId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetInputFinancePackageContent(string userId, long packageId, long subscriptionId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetPackageContent(userId, packageId, subscriptionId);
+            if (data == null)
+                return NotFound(new Response<List<InputPackageBreakdownDto>> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<List<InputPackageBreakdownDto>> { Succeeded = true, Data = data });
+        }
+        [HttpGet("farmer/{userId}/inputfinance/{packageId}/repayment-details/{subscriptionId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> GetPackageRepaymentBreakdownAsync(string userId, long packageId, long subscriptionId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _farmerManager.GetPackageRepaymentBreakdownAsync(packageId, subscriptionId, pageNumber, pageSize);
+            if (data == null)
+                return NotFound(new Response<PagedResult<RepaymentBreakdownDto>> { Succeeded = false, Message = "Not found." });
+
+            return Ok(new Response<PagedResult<RepaymentBreakdownDto>> { Succeeded = true, Data = data });
+        }
+
+
+        [HttpGet("farmer/wallets/{userId}")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> WalletList(string userId, [FromQuery] FarmerListQuery query)
+        {
+            query.BusinessCode = RequireBusinessCode();
+            query.UserId = userId;
+            var data = await _farmerManager.GetFarmerWallletsByUserId(query);
+            return Ok(new Response<PagedResult<FarmerWalletModule>> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("farmer/wallets/{userId}/summary")]
+        [HasPermission(Permissions.Farmers.View)]
+        public async Task<IActionResult> WalletSummary(string userId)
+        {
+            var businessCode = RequireBusinessCode();
+            var data = await _farmerManager.GetFarmerWalletSummaryAsync(userId, businessCode);
+            if (data == null)
+                return NotFound(new Response<FarmerWalletSummaryDto> { Succeeded = false, Message = "Wallet not found." });
+
+            return Ok(new Response<FarmerWalletSummaryDto> { Succeeded = true, Data = data });
+        }
+
+
+        #region agent
+        [HttpGet("agent/list")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> ListAgents([FromQuery] AgentListQuery query)
+        {
+            query.BusinessId = RequireBusinessId();
+            var data = await _agentManager.GetAgentsAsync(query);
+            return Ok(new Response<PagedResult<AgentListItemDto>> { Succeeded = true, Data = data });
+        }
+        [HttpGet("agent/summary")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> GetSummaryAsync()
+        {
+            var businessId = RequireBusinessId();
+            var data = await _agentManager.GetSummaryAsync(businessId);
+            return Ok(new Response<AgentSummaryDto> { Succeeded = true, Data = data });
+        }
+        [HttpGet("agent/overview-detail/{userId}")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> GetOverviewAsync(string userId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _agentManager.GetAgentOverviewAsync(userId);
+            return Ok(new Response<AgentOverviewResponse> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("agent/export")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> Export([FromQuery] AgentListQuery query, [FromQuery] string format = "csv")
+        {
+            query.BusinessId = RequireBusinessId();
+            var rows = await _agentManager.GetAllForExportAsync(query);
+            var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmm");
+
+            return format.Equals("xlsx", StringComparison.OrdinalIgnoreCase)
+                ? File(AgentExport.ToXlsx(rows),
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       $"agents-{stamp}.xlsx")
+                : File(AgentExport.ToCsv(rows), "text/csv", $"agents-{stamp}.csv");
+        }
+
+
+        [HttpPost("agent/create")]
+        [HasPermission(Permissions.Agents.Manage)]
+        public async Task<IActionResult> CreateAgentAsync([FromBody] AdminCreateAgentRequest model, [FromQuery] AdminOnBoardingArgs args,
+          CancellationToken ct)
+        {
+            args.businessCode = RequireBusinessCode();
+            args.OnboardedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            try
+            {
+                var result = await _agentManager.CreateAgentAsync(model, args, ct);
+                return Ok(new Response<(bool, string, string[])>
+                {
+                    Succeeded = true,
+                    Data = result,
+                    Message = result.msg,
+                    Code = result.status ? AdminResponseCodes.Success : AdminResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode((int)ex.HttpStatusCode, new
+                {
+                    status = false,
+                    message = ex.ExceptionMessage,
+                    errors = ex.Errors
+                });
+            }
+        }
+        [HttpGet("agent/{userId}/farmers")]
+        [HasPermission(Permissions.Agents.View)]
+        public async Task<IActionResult> GetAgentFarmers(
+        string userId, [FromQuery] string? search, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var result = await _agentManager.GetAgentFarmersAsync(userId, search, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<AgentFarmersResponse> { Succeeded = false, Message = "Memberships not found." });
+            return Ok(new Response<AgentFarmersResponse> { Succeeded = true, Data = result });
+     
+        }
+        [HttpGet("agent/{userId}/memberships")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentMembershipsAsync(string userId)
+        {
+            
+            var data = await _agentManager.GetAgentMembershipsAsync(userId);
+            if (data == null)
+                return NotFound(new Response<AgentMembershipsResponse> { Succeeded = false, Message = "Memberships not found." });
+            return Ok(new Response<AgentMembershipsResponse> { Succeeded = true, Data = data });
+        }
+        [HttpGet("agent/{userId}/organizations")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentOrganizationsAsync(string userId)
+        {
+            var data = await _agentManager.GetAgentOrganizationsAsync(userId);
+            if (data == null)
+                return NotFound(new Response<AgentOrganizationsResponse> { Succeeded = false, Message = "Organizations not found." });
+            return Ok(new Response<AgentOrganizationsResponse> { Succeeded = true, Data = data });
+        }
+        [HttpGet("agent/{userId}/input-finance")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentInputFinanceAsync(
+        string userId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 5)
+        {
+            var result = await _agentManager.GetAgentInputFinanceAsync(userId, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<AgentInputFinanceResponse> { Succeeded = false, Message = "Input finane record not found." });
+            return Ok(new Response<AgentInputFinanceResponse> { Succeeded = true, Data = result });
+
+        }
+
+        [HttpGet("agent/{userId}/wallets")]
+        [HasPermission(Permissions.Agents.View)]
+
+        public async Task<IActionResult> GetAgentWallets(
+       string userId)
+        {
+            string businessCode = RequireBusinessCode();
+            var result = await _agentManager.GetAgentWalletsAsync(userId, businessCode);
+            if (result == null)
+                return NotFound(new Response<AgentWalletResponse> { Succeeded = false, Message = "Wallets not found." });
+            return Ok(new Response<AgentWalletResponse> { Succeeded = true, Data = result });
+
+        }
+
+
+        [HttpPost("agent/{userId}/suspend")]
+        [HasPermission(Permissions.Agents.Manage)]
+        public async Task<IActionResult> SuspendAgent(string userId
+         //, 
+         // [FromBody] SuspendFarmerRequest request
+         )
+        {
+            var BusinessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var ok = await _agentManager.SuspendAgentAsync(BusinessId, userId, actingUserId, null);
+
+            return ok
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Agent account suspended." })
+                : BadRequest(new Response<bool> { Succeeded = false, Message = "Agent not found or already suspended." });
+        }
+        [HttpPost("agent/{userId}/reactivate")]
+        [HasPermission(Permissions.Agents.Manage)]
+        public async Task<IActionResult> ReactivateAgent(string userId
+            //, 
+            // [FromBody] SuspendFarmerRequest request
+            )
+        {
+            var BusinessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var ok = await _agentManager.ReactivateAgentAsync(BusinessId, userId, actingUserId, null);
+
+            return ok
+                ? Ok(new Response<bool> { Succeeded = true, Data = true, Message = "Agent account reactivated." })
+                : BadRequest(new Response<bool> { Succeeded = false, Message = "Agent not found or already active." });
+        }
+        #endregion
+
+        #region membership
+        [HttpGet("membership/list")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> ListMemberships([FromQuery] MemberShipListQuery query)
+        {
+            query.BusinessId = RequireBusinessId();
+            var data = await _membershipManager.GetMembershipsAsync(query);
+            return Ok(new Response<PagedResult<MemberShipListItemDto>> { Succeeded = true, Data = data });
+        }
+
+      
+
+        [HttpGet("membership/summary")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> GetMembershipSummaryAsync()
+        {
+            var businessId = RequireBusinessId();
+            var data = await _membershipManager.GetSummaryAsync(businessId);
+            return Ok(new Response<MemberShipSummaryDto> { Succeeded = true, Data = data });
+        }
+        [HttpGet("membership/overview-detail/{membershipId}")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> GetMembershipOverviewAsync(long membershipId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _membershipManager.GetMembershipOverviewAsync(businessId,membershipId);
+            return Ok(new Response<MemberShipOverviewDto> { Succeeded = true, Data = data });
+        }
+
+        [HttpPost("membership/create")]
+        [HasPermission(Permissions.Memberships.Manage)]
+        public async Task<IActionResult> CreateMembershipAsync([FromBody] AdminCreateMembershipRequest model, [FromQuery] AdminOnBoardingArgs args,
+        CancellationToken ct)
+        {
+            args.businessCode = RequireBusinessCode();
+            args.OnboardedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            try
+            {
+                var result = await _membershipManager.CreateMembershipAsync(model, args, ct);
+                return Ok(new Response<(bool, string, MemberShipListItemDto)>
+                {
+                    Succeeded = true,
+                    Data = result,
+                    Message = result.msg,
+                    Code = result.status ? AdminResponseCodes.Success : AdminResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode((int)ex.HttpStatusCode, new
+                {
+                    status = false,
+                    message = ex.ExceptionMessage,
+                    errors = ex.Errors
+                });
+            }
+        }
+
+
+        [HttpGet("membership/{membershipId}/members")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> GetMembershipMembers(
+       long membershipId, [FromQuery] string? search, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        {
+            var result = await _membershipManager.GetMembershipMembersAsync(RequireBusinessId(), membershipId, search, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<MembershipMembersResponse> { Succeeded = false, Message = "Members not found." });
+            return Ok(new Response<MembershipMembersResponse> { Succeeded = true, Data = result });
+
+        }
+
+        [HttpGet("membership/{membershipId}/organizations")]
+        [HasPermission(Permissions.Memberships.View)]
+
+        public async Task<IActionResult> GetMembershipOrganizationsAsync(long membershipId)
+        {
+            var data = await _membershipManager.GetMembershipOrganizationsAsync(RequireBusinessId(), membershipId);
+            if (data == null)
+                return NotFound(new Response<MembershipOrganizationsResponse> { Succeeded = false, Message = "Organizations not found." });
+            return Ok(new Response<MembershipOrganizationsResponse> { Succeeded = true, Data = data });
+        }
+
+
+        [HttpGet("membership/{membershipId}/agents")]
+        [HasPermission(Permissions.Memberships.View)]
+
+        public async Task<IActionResult> GetMembershipAgentsAsync(long membershipId)
+        {
+
+            var data = await _membershipManager.GetMembershipAgentsAsync(RequireBusinessId(), membershipId);
+            if (data == null)
+                return NotFound(new Response<MembershipAgentsResponse> { Succeeded = false, Message = "Agents not found." });
+            return Ok(new Response<MembershipAgentsResponse> { Succeeded = true, Data = data });
+        }
+
+        [HttpGet("membership/{membershipId}/input-finance")]
+        [HasPermission(Permissions.Memberships.View)]
+
+        public async Task<IActionResult> GetMembershipInputFinanceAsync(
+       long membershipId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 5)
+        {
+            var result = await _membershipManager.GetMembershipInputFinanceAsync(membershipId, pageNumber, pageSize);
+            if (result == null)
+                return NotFound(new Response<InputFinanceResponse> { Succeeded = false, Message = "Input finance record not found." });
+            return Ok(new Response<InputFinanceResponse> { Succeeded = true, Data = result });
+
+        }
+        [HttpPost("membership/{membershipId}/suspend")]
+        [HasPermission(Permissions.Memberships.Manage)]
+        public async Task<IActionResult> SuspendMembership(
+      long membershipId,
+      [FromBody] SuspendMembershipRequest request,
+      CancellationToken ct = default)
+        {
+            var businessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+            var result = await _membershipManager.SuspendMembershipAsync(
+                businessId, membershipId, request?.Reason, actingUserId, ct);
+            if (result == null)
+                return BadRequest(new Response<MembershipStatusChangeResult> { Succeeded = false, 
+                    Message = "Could not suspend membership." });
+            return Ok(new Response<MembershipStatusChangeResult> { Succeeded = true, Data = result });
+
+        }
+
+        [HttpPost("membership/{membershipId}/reactivate")]
+        [HasPermission(Permissions.Memberships.Manage)]
+        public async Task<IActionResult> ReactivateMembership(
+            long membershipId,
+            CancellationToken ct = default)
+        {
+            var businessId = RequireBusinessId();
+            var actingUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
+            var result = await _membershipManager.ReactivateMembershipAsync(
+                businessId, membershipId, actingUserId, ct);
+            if (result == null)
+                return BadRequest(new Response<MembershipStatusChangeResult>
+                {
+                    Succeeded = false,
+                    Message = "Could not reactivate membership."
+                });
+            return Ok(new Response<MembershipStatusChangeResult> { Succeeded = true, Data = result });
+        }
+
+        #endregion membership
+
+        #region organization
+        [HttpGet("organization/list")]
+        [HasPermission(Permissions.Organizations.View)]
+        public async Task<IActionResult> ListOrganizations([FromQuery] OrganizationListQuery query)
+        {
+            query.BusinessId = RequireBusinessId();
+            var data = await _organizationManager.GetOrganizationsAsync(query);
+            return Ok(new Response<PagedResult<OrganizationListItemDto>> { Succeeded = true, Data = data });
+        }
+        #endregion 
 
     }
 }

@@ -208,13 +208,21 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IAdminDashboardManager, AdminDashboardManager>();
             services.AddScoped<IAdminUserManagementManager, AdminUserManagementManager>();
             services.AddScoped<IAdminFarmerManager, AdminFarmerManager>();
+
+            services.AddScoped<IAdminOrganizationManager, AdminOrganizationManager>();
+            services.AddScoped<IAdminAgentManager, AdminAgentManager>();
+            services.AddScoped<IAdminMembershipManager, AdminMembershipManager>();
+
             services.AddScoped<IRoleAccessManager, RoleAccessManager>();
             services.AddScoped<IAdminAuditLogger, AdminAuditLogger>();
             services.AddScoped<IInputFinanceReader, EfInputFinanceReader>();
             services.AddScoped<IClientInfoProvider, ClientInfoProvider>();
             services.AddScoped<IPermissionService, PermissionService>();
             services.AddSingleton<IPermissionCacheInvalidator, PermissionCacheInvalidator>();
+            services.AddScoped<IAdminSettingsManager, AdminSettingsManager>();
 
+            services.Configure<ProfileImageOptions>(configuration.GetSection("ProfileImages"));
+            services.AddSingleton<IProfileImageStore, S3ProfileImageStore>();
         }
     }
 }

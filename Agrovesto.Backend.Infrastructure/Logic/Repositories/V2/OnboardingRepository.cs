@@ -12,11 +12,13 @@ using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using DocumentFormat.OpenXml.Math;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -31,7 +33,9 @@ using System.Net.NetworkInformation;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using static Agrovesto.Backend.Infrastructure.Entities.Common.Permissions;
 using FarmerPersonalInfoDto = Agrovesto.Backend.Core.Models.Businesses.FarmerPersonalInfoDto;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
@@ -55,7 +59,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<CreateUserResult> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId, OneTimePassword otp);
        // Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model);
+        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string? ipAddress, string? userAgent);
         //Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level);
         Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified);
         Task OnCreateKYC(KYCDetails kYC);
@@ -80,6 +84,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<Role> GetRoleAsync(string roleName);
         Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work);
         Task<UserModel> OnUpdateUserProfileAsync(string userId, ProfileRequestModel model, string modifiedBy = null);
+        Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -90,12 +95,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private readonly IConfiguration _configuration;
         private readonly ILogger<OnboardingRepository> _log;
         private readonly IClientInfoProvider _client;
+        private readonly Microsoft.Extensions.Caching.Memory.IMemoryCache _cache;
+        private const int MaxFailedAdminLogins = 5;
+        private static readonly TimeSpan AdminLoginLockWindow = TimeSpan.FromMinutes(15);
+
+        private sealed class FailedLoginCounter { public int Count; }
+
+        // Throttle key is per-account-per-IP so one attacker cannot lock out the real user from elsewhere.
+        private static string AdminLoginKey(string email, string? ip) =>
+            $"admin-login-fail:{email.ToLowerInvariant()}|{ip ?? "unknown"}";
+
         public OnboardingRepository(DataContext context,
             SignInManager<User> signInManager,
 
         IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
-            ILogger<OnboardingRepository> log, IClientInfoProvider client)
+            ILogger<OnboardingRepository> log, IClientInfoProvider client,
+            Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
         {
+            _cache = cache;
             _userManager = userManager;
             _roleManager = roleManager;
             _context = context;
@@ -138,7 +155,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     .SetProperty(token => token.RevokedOn, DateTime.UtcNow)
                     .SetProperty(token => token.RevokedReason, "Logout"));
         }
+        public async Task<bool> AdminLogout(string userId, string? sessionId, bool allDevices = false)
+        {
+            const string reason = "Logged out";
 
+            var query = _context.RefreshTokens
+                .Where(t => t.UserId == userId && t.IsAdminSession && t.RevokedOn == null);
+
+            if (!allDevices)
+            {
+                if (string.IsNullOrWhiteSpace(sessionId))
+                    return true; // nothing to revoke, treat as already logged out
+
+                query = query.Where(t => t.FamilyId == sessionId);
+            }
+
+            await query.ExecuteUpdateAsync(update => update
+                .SetProperty(t => t.RevokedOn, DateTime.UtcNow)
+                .SetProperty(t => t.RevokedReason, reason));
+
+            return true;
+        }
         public async Task<AdminLoginResult> AdminLogin(
             AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
         {
@@ -149,18 +186,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             var email = model.Email.Trim();
+            var throttleKey = AdminLoginKey(email, ipAddress);
+            if (_cache.TryGetValue(throttleKey, out var existing) &&
+                existing is FailedLoginCounter { Count: >= MaxFailedAdminLogins })
+            {
+                return AdminLoginResult.Fail(AdminLoginStatus.TooManyAttempts, AdminMessages.TooManyAttempts);
+            }
+
             var user = await _userManager.FindByEmailAsync(email);
             user ??= await _userManager.FindByNameAsync(email);
 
             // Keep unknown users and bad passwords indistinguishable to callers.
             if (user is null || !await _userManager.CheckPasswordAsync(user, model.Password))
             {
+                var entry = _cache.GetOrCreate(throttleKey, e =>
+                {
+                    e.AbsoluteExpirationRelativeToNow = AdminLoginLockWindow;
+                    return new FailedLoginCounter();
+                })!;
+                Interlocked.Increment(ref entry.Count);
+
                 if (user is not null)
                     await RecordAdminLoginHistoryAsync(user.Id, false, "Invalid credentials", ipAddress, userAgent);
 
                 return AdminLoginResult.Fail(AdminLoginStatus.InvalidCredentials, AdminMessages.InvalidCredentials);
             }
 
+            _cache.Remove(throttleKey);
             if (!user.IsAdminUser)
             {
                 await RecordAdminLoginHistoryAsync(user.Id, false, "No admin account", ipAddress, userAgent);
@@ -203,6 +255,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await RecordAdminLoginHistoryAsync(user.Id, false, "No admin access", ipAddress, userAgent);
                 return AdminLoginResult.Fail(AdminLoginStatus.NoAdminAccess, AdminMessages.NoAdminAccess);
             }
+            var roles = await _context.UserRoles
+         .Where(userRole => userRole.UserId == user.Id &&
+                            userRole.BusinessId == activeBusiness.BusinessId &&
+                            userRole.IsActive)
+         .Select(userRole => userRole.Role.Name!)
+         .Distinct()
+         .ToListAsync();
 
             var loginModel = new LoginModel
             {
@@ -214,7 +273,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var weak = CheckWeakCredentials(user, loginModel);
             var familyId = Guid.NewGuid().ToString("N");
             var tokens = await IssueAdminTokensAsync(
-                user, activeBusiness, weak.IsWeak, weak.Message, familyId, ipAddress, access);
+                user, activeBusiness, weak.IsWeak, weak.Message, familyId, ipAddress, access, roles);
 
             await RecordAdminLoginHistoryAsync(user.Id, true, null, ipAddress, userAgent);
 
@@ -235,19 +294,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             string refreshToken, string? ipAddress = null)
         {
             const string invalid = "Invalid or expired refresh token";
+            const string activeToken = "Access token still active";
             if (string.IsNullOrWhiteSpace(refreshToken))
                 return (false, invalid, null!);
 
             var stored = await _context.RefreshTokens
                 .FirstOrDefaultAsync(token => token.TokenHash == HashToken(refreshToken));
 
-            if (stored is null || !stored.IsAdminSession)
+            if (stored is null 
+                //|| !stored.IsAdminSession
+                )
                 return (false, invalid, null!);
 
             if (stored.RevokedOn is not null)
             {
                 await RevokeRefreshFamilyAsync(stored.FamilyId, "Refresh token reuse detected");
-                return (false, invalid, null!);
+                return (false, activeToken, null!);
             }
 
             if (stored.ExpiresOn <= DateTime.UtcNow)
@@ -281,7 +343,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await RevokeRefreshFamilyAsync(stored.FamilyId, "Admin permissions removed");
                 return (false, invalid, null!);
             }
-
+            var roles = await _context.UserRoles
+         .Where(userRole => userRole.UserId == user.Id &&
+                            userRole.BusinessId == activeBusiness.BusinessId &&
+                            userRole.IsActive)
+         .Select(userRole => userRole.Role.Name!)
+         .Distinct()
+         .ToListAsync();
             // Rotate atomically so two concurrent refresh requests cannot both succeed.
             var updated = await _context.RefreshTokens
                 .Where(token => token.Id == stored.Id && token.RevokedOn == null)
@@ -300,7 +368,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 : null;
             var tokens = await IssueAdminTokensAsync(
                 user, activeBusiness, stored.RequiresCredentialChange, securityNotice,
-                stored.FamilyId, ipAddress, access);
+                stored.FamilyId, ipAddress, access, roles);
 
             return (true, "Successful", tokens);
         }
@@ -342,30 +410,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             string? securityNotice,
             string familyId,
             string? ipAddress,
-            AdminAccess access)
+            AdminAccess access,
+            IList<string>? roles)
         {
             var now = DateTime.UtcNow;
             user.LastLoginDate = now;
 
-            var modules = await _context.BusinessLicenseModules
-                .Where(x => x.BusinessLicense.BusinessId == activeBusiness.BusinessId && x.IsEnabled)
-                .Select(x => x.SystemModule.Code)
-                .ToListAsync();
-            var claims = BuildClaims(
-                user,
-                access.Roles,
-                activeBusiness,
-                new List<OrganizationDto>(),
-                hasPendingOnboarding: false,
-                modules: modules,
-                requiresCredentialChange: requiresCredentialChange);
+            var claims = BuildAdminClaims(user, activeBusiness, requiresCredentialChange);
             claims.Add(new Claim("SessionId", familyId));
             claims.Add(new Claim("portal", "admin"));
             claims.AddRange(access.Permissions
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(permission => new Claim(AdminPermissions.ClaimType, permission)));
 
-            var accessExpiry = now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
+            if (user.LastLoginDate.HasValue)
+                claims.Add(new Claim("LastLogin", user.LastLoginDate.Value.ToString("O")));
+
+            claims.Add(new Claim("MemberSince", user.CreatedOn.ToString("O")));
+            if (roles?.Any() == true)
+            {
+                foreach (var role in roles)
+                {
+                    claims.Add(new Claim("Roles", role));
+                }
+            }
+
+            var accessExpiry = now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 30));
             var accessToken = GenerateJwtToken(claims, accessExpiry);
             var rawRefreshToken = GenerateRefreshTokenValue();
             var refreshExpiry = now.AddDays(_configuration.GetValue("JWT:RefreshTokenDays", 7));
@@ -537,6 +607,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return user;
         }
 
+         // Admin tokens carry identifiers only; PII, roles and permissions are resolved server-side.
+         private static List<Claim> BuildAdminClaims(
+            User user, UserBusiness activeBusiness, bool requiresCredentialChange) => new()
+         {
+             new Claim(JwtRegisteredClaimNames.Sub, user.Id),
+             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+             new Claim(ClaimTypes.NameIdentifier, user.Id),
+             new Claim("BusinessId", activeBusiness.BusinessId.ToString()),
+             new Claim("BusinessCode", activeBusiness.Business?.BusinessCode),
+             new Claim("AuthMethod", user.SignupMethod.ToString()),
+             new Claim("DisplayName", $"{user?.FirstName} {user?.LastName}"),
+             new Claim("Email", user?.Email),
+             new Claim("PhoneNumber", user?.PhoneNumber),
+             new Claim("UserType", user?.UserType),
+
+             new Claim("RequiresCredentialChange", requiresCredentialChange.ToString())
+         };
+
          private List<Claim> BuildClaims(
         User user,
         IList<string>? roles,
@@ -663,7 +751,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return (false, null);
         }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
-        LoginModel model)
+        LoginModel model, string? ipAddress, string? userAgent)
         {
             var user = await ResolveUserAsync(model);
             if (user == null)
@@ -739,25 +827,52 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 modules,
                 weakCredentialResult.IsWeak
             );
+            var now = DateTime.UtcNow;
+          //  var expiration = DateTime.UtcNow.AddHours(1);
+            //var token = GenerateJwtToken(claims, expiration);
 
-            var expiration = DateTime.UtcNow.AddHours(1);
-            var token = GenerateJwtToken(claims, expiration);
+
+            var accessExpiry =  now.AddMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
+            var accessToken = GenerateJwtToken(claims, accessExpiry);
+            var rawRefreshToken = GenerateRefreshTokenValue();
+            var refreshExpiry = now.AddDays(_configuration.GetValue("JWT:RefreshTokenDays", 7));
+
+            _context.RefreshTokens.Add(new Agrovesto.Backend.Infrastructure.Entities.Common.RefreshToken
+            {
+                UserId = user.Id,
+                BusinessId = activeBusiness.BusinessId,
+                TokenHash = HashToken(rawRefreshToken),
+                FamilyId = Guid.NewGuid().ToString("N"),
+                CreatedOn = now,
+                ExpiresOn = refreshExpiry,
+                RequiresCredentialChange = weakCredentialResult.IsWeak,
+                CreatedByIp = ipAddress,
+                IsAdminSession = true
+            });
+
+            await _context.SaveChangesAsync();
+
+         
             return (true, "Successful", new TokenModel
             {
                 Id = user.Id,
                 Email = user.Email,
                 Name = user.Name,
-                ExpiresOn= expiration,
-                Token = token,
+                ExpiresOn = accessExpiry,
+                Token = accessToken,
+                RefreshToken = rawRefreshToken,
+                RefreshTokenExpiresOn = refreshExpiry,
                 Roles = roles.ToList(),
-                Organizations= organizations,
+                Organizations =organizations,
                 phone_number = user.PhoneNumber,
-                TokenType =TokenType.AccessToken,
+                TokenType = TokenType.AccessToken,                
                 BusinessCode = activeBusiness.Business.BusinessCode,
                 SecurityNotice = weakCredentialResult.Message,
                 Authmethod=user.SignupMethod.ToString(),
                 RequiresCredentialChange= weakCredentialResult.IsWeak,
-                TwoFactorEnabled= false
+                TwoFactorEnabled= false,
+                
+           
             });
         } 
         

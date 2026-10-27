@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Core.Enums;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
@@ -48,6 +49,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long OrganizationId { get; set; }
 
         public string? UserId { get; set; }
+      //  public User User { get; set; }  // FK to User
 
         public string? OrganizationCode { get; set; }
 
@@ -86,6 +88,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset OnboardedOn { get; set; }
 
         public bool IsActive { get; set; } = true;
+        public OrganizationStatus OrganizationStatus { get; set; } = OrganizationStatus.Active;
 
         public ICollection<OrganizationBusiness> OrganizationBusinesses { get; set; }
             = new List<OrganizationBusiness>();
