@@ -38,6 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<InputFinanceResponse> GetMembershipInputFinanceAsync(long membershipId, int page, int pageSize);
         Task<MembershipMembersResponse> GetMembershipMembersAsync(long businessId, long membershipId, string? search, int pageNumber, int pageSize);
         Task<MembershipOrganizationsResponse> GetMembershipOrganizationsAsync(long businessId, long membershipId);
+        Task<MemberShipOverviewDto> GetMembershipOverviewAsync(long businessId, long membershipId);
         Task<PagedResult<MemberShipListItemDto>> GetMembershipsAsync(MemberShipListQuery p);
         Task<MemberShipSummaryDto> GetSummaryAsync(long businessId);
         Task<MembershipStatusChangeResult> ReactivateMembershipAsync(long businessId, long membershipId, string actingUserId, CancellationToken ct);

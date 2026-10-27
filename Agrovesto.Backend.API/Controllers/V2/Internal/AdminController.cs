@@ -918,6 +918,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             var data = await _membershipManager.GetSummaryAsync(businessId);
             return Ok(new Response<MemberShipSummaryDto> { Succeeded = true, Data = data });
         }
+        [HttpGet("membership/overview-detail/{membershipId}")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> GetMembershipOverviewAsync(long membershipId)
+        {
+            var businessId = RequireBusinessId();
+            var data = await _membershipManager.GetMembershipOverviewAsync(businessId,membershipId);
+            return Ok(new Response<MemberShipOverviewDto> { Succeeded = true, Data = data });
+        }
 
         [HttpPost("membership/create")]
         [HasPermission(Permissions.Memberships.Manage)]
@@ -948,14 +956,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-        [HttpGet("membership/members/{membershipId}")]
-        [HasPermission(Permissions.Memberships.View)]
-        public async Task<IActionResult> GetMembershipMembersAsync(long membershipId, [FromQuery] string? search, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
-        {
-            var businessId = RequireBusinessId();
-            var data = await _membershipManager.GetMembershipMembersAsync(businessId, membershipId, search, pageNumber, pageSize);
-            return Ok(new Response<MembershipMembersResponse> { Succeeded = true, Data = data });
-        }
 
         [HttpGet("membership/{membershipId}/members")]
         [HasPermission(Permissions.Memberships.View)]
