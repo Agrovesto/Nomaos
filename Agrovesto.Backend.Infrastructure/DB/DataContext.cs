@@ -19,6 +19,7 @@ using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
+using static Agrovesto.Backend.Infrastructure.Entities.Common.Permissions;
 using SubscriptionDocument = Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument;
 
 namespace Agrovesto.Backend.Infrastructure.DB
@@ -174,6 +175,18 @@ namespace Agrovesto.Backend.Infrastructure.DB
             modelBuilder.ApplyConfiguration(new FarmerAgentConfiguration());
             modelBuilder.ApplyConfiguration(new FarmerConfiguration());
             modelBuilder.ApplyConfiguration(new CredentialResetAttemptConfiguration());
+
+            modelBuilder.Entity<Agent>()
+    .HasOne(a => a.User)
+    .WithMany()
+    .HasForeignKey(a => a.UserId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<MemberShip>()
+                .HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<BusinessWalletProvider>()
             .HasIndex(x => new { x.BusinessCode, x.ProviderId })

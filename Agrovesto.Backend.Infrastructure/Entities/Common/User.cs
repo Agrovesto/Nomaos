@@ -53,6 +53,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? Department { get; set; }
         public string? AdminCode { get; set; } = default!;   // ADM000124
         public AdminUserStatus? Status { get; set; }
+        [MaxLength(300)] public string? AdminUserOfficeAddress { get; set; }
+        [MaxLength(100)] public string? AdminUserOfficeState { get; set; }
+        [MaxLength(100)] public string? AdminUserOfficeCity { get; set; }
+        [MaxLength(300)] public string? ProfileImageKey { get; set; }   // storage key, not a URL
         /// <summary>
         /// /admin panel
         /// </summary>

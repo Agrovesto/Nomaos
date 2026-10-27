@@ -25,6 +25,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -69,43 +70,40 @@ builder.Host.UseSerilog(
 
 
 
-//var vaultUrl = "https://dev-vault.agrovesto.com"; //local
 
-//var roleId = "69d8526c-0bf6-56c8-40cd-8e8b37c213b4"; //local
-//var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
-
-
-if (!builder.Environment.IsDevelopment())
-{
-    var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
-    var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
-    var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
-    var vaultMount = Environment.GetEnvironmentVariable("VAULT_KV_MOUNT") ?? "kv";
-    var vaultSecretPath = Environment.GetEnvironmentVariable("VAULT_SECRET_PATH");
+//if (!builder.Environment.IsDevelopment())
+//{
+//var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
+//    var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
+//    var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
+//    var vaultMount = Environment.GetEnvironmentVariable("VAULT_KV_MOUNT") ?? "kv";
+//    var vaultSecretPath = Environment.GetEnvironmentVariable("VAULT_SECRET_PATH");
 
 
-    if (string.IsNullOrWhiteSpace(vaultUrl))
-        throw new InvalidOperationException("VAULT_ADDR is not configured.");
-    if (string.IsNullOrWhiteSpace(roleId))
-        throw new InvalidOperationException("VAULT_ROLE_ID is not configured.");
-    if (string.IsNullOrWhiteSpace(secretId))
-        throw new InvalidOperationException("VAULT_SECRET_ID is not configured.");
-    if (string.IsNullOrWhiteSpace(vaultSecretPath))
-        throw new InvalidOperationException("VAULT_SECRET_PATH is not configured.");
-    {
+//    if (string.IsNullOrWhiteSpace(vaultUrl))
+//        throw new InvalidOperationException("VAULT_ADDR is not configured.");
+//    if (string.IsNullOrWhiteSpace(roleId))
+//        throw new InvalidOperationException("VAULT_ROLE_ID is not configured.");
+//    if (string.IsNullOrWhiteSpace(secretId))
+//        throw new InvalidOperationException("VAULT_SECRET_ID is not configured.");
+//    if (string.IsNullOrWhiteSpace(vaultSecretPath))
+//        throw new InvalidOperationException("VAULT_SECRET_PATH is not configured.");
+//    {
 
-        ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
-            () => new VaultOptions(
-                vaultUrl,
-                new AppRoleAuthMethodInfo(roleId, secretId),
-                reloadOnChange: true,
-                reloadCheckIntervalSeconds: 60
-            ),
-            vaultSecretPath,
-            vaultMount
-        );
-    }
-}
+//        ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
+//            () => new VaultOptions(
+//                vaultUrl,
+//                new AppRoleAuthMethodInfo(roleId, secretId),
+//                reloadOnChange: true,
+//                reloadCheckIntervalSeconds: 60
+//            ),
+//            vaultSecretPath,
+//            vaultMount
+//        );
+//    }
+//}
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OpenTelemetry — traces + metrics to Alloy (Tempo / Prometheus), driven purely
@@ -135,6 +133,7 @@ Log.Information(
 // make the smoke test assert on a container that died for the wrong reason.
 var databaseConfigured = !string.IsNullOrWhiteSpace(
     builder.Configuration.GetConnectionString("DefaultConnection"));
+
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
@@ -175,6 +174,9 @@ else
 {
     Log.Warning("Hangfire is disabled: no DefaultConnection configured (or HANGFIRE_ENABLED=false).");
 }
+
+
+
 
 builder.Services.Configure<IdentitypassOptions>(
     builder.Configuration.GetSection("IdentityPass"));
@@ -254,26 +256,55 @@ builder.Services.AddAuthentication(options =>
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
         ),
         RoleClaimType = "Roles"
-    }; 
+    };
     opt.Events = new JwtBearerEvents
     {
         OnTokenValidated = async context =>
         {
-            var jti = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
+            var principal = context.Principal;
 
+            var jti = principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
             if (string.IsNullOrEmpty(jti))
             {
                 context.Fail("Token missing jti claim.");
                 return;
             }
 
-            var revocationService = context.HttpContext.RequestServices
-                .GetRequiredService<IOnboardingRepository>();
+            var services = context.HttpContext.RequestServices;
 
+            var revocationService = services.GetRequiredService<IOnboardingRepository>();
             if (await revocationService.IsRevokedAsync(jti))
             {
                 context.Fail("Token has been revoked.");
+                return;
             }
+
+            // Only admin-portal tokens carry a refresh-token session.
+            if (principal?.FindFirstValue("portal") != "admin")
+                return;
+
+            var sessionId = principal.FindFirstValue("SessionId");
+            if (string.IsNullOrEmpty(sessionId))
+            {
+                context.Fail("Admin token missing session.");
+                return;
+            }
+
+            var cache = services.GetRequiredService<IMemoryCache>();
+            var cacheKey = $"admin-session-alive:{sessionId}";
+
+            if (!cache.TryGetValue(cacheKey, out bool alive))
+            {
+                var db = services.GetRequiredService<DataContext>();
+                alive = await db.RefreshTokens.AnyAsync(t =>
+                    t.FamilyId == sessionId && t.IsAdminSession && t.RevokedOn == null);
+
+                // Short TTL bounds how long a revoked session can keep working.
+                cache.Set(cacheKey, alive, TimeSpan.FromSeconds(30));
+            }
+
+            if (!alive)
+                context.Fail("Session revoked.");
         }
     };
 });

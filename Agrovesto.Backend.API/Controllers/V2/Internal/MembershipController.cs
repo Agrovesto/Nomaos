@@ -73,7 +73,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         
 
         [HttpPut("update-farmer-profile")]
-        public async Task<IActionResult> UpdateFarmerProfile([FromBody] FarmerUpdateModel model, [FromQuery] string? userId)
+        public async Task<IActionResult> UpdateFarmerProfile([FromBody] FarmerUpdateModel model, [FromQuery] string? userId,
+            [FromQuery] string businessCode)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -92,7 +93,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-                var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
+                var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId,businessCode, model);
 
                 return Ok(new Response<FarmerUpdateResultDto>()
                 {

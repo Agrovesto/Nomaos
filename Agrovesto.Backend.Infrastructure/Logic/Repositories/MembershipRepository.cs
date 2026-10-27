@@ -151,7 +151,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             {
                 organization = await _context.Organizations
                     .FirstOrDefaultAsync(o =>
-                        o.BusinessCode == args.organizationCode && o.IsActive);
+                        o.BusinessCode == args.organizationCode && o.IsActive && o.OrganizationStatus == OrganizationStatus.Active);
 
                 if (organization is null)
                     throw new ValidationException(
@@ -162,7 +162,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (args.AgentIds.Any())
             {
                 var agentExists = await _context.Agents
-                    .AnyAsync(a => args.AgentIds.Contains(a.Id) && a.IsActive);
+                    .AnyAsync(a => args.AgentIds.Contains(a.Id) && a.IsActive && a.AgentStatus == AgentStatus.Active);
 
                 if (!agentExists)
                     throw new ValidationException(
@@ -276,7 +276,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // ── Load membership with its current stub user ─────────────
             var membership = await _context.MemberShips
                 .Include(m => m.MemberShipType)
-                .FirstOrDefaultAsync(m => m.Id == dto.MembershipId && m.IsActive);
+                .FirstOrDefaultAsync(m => m.Id == dto.MembershipId && m.IsActive && m.MembershipStatus == MembershipStatus.Active );
 
             if (membership is null)
                 throw new NotFoundException("Membership not found.");

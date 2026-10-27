@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 namespace Agrovesto.Backend.Core.Models.Admin
 {
 
-    public enum DashboardPeriod { Today, Week, Month, Quarter, Year, Custom }
+    public enum DashboardPeriod { Today =1, Week=2, Month=3, Quarter=4, Year=5, Custom=6 }
 
     /// <summary>How the registration chart is bucketed across the year.</summary>
-    public enum ChartGranularity { Day, Week, Month }
+    public enum ChartGranularity { Day =1, Week=2, Month=3 }
 
     /// <summary>
     /// ?period=month

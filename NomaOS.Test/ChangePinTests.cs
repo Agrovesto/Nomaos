@@ -41,7 +41,7 @@ public class ChangePinTests
     }
 
     private static OnboardingRepository CreateRepository(DataContext context) =>
-        new(context, CreateSignInManager(), null!, null!, null!, NullLogger<OnboardingRepository>.Instance, null!);
+        new(context, CreateSignInManager(), null!, null!, null!, NullLogger<OnboardingRepository>.Instance, null!, null!);
 
     private static async Task<User> SeedUserAsync(DataContext context, string pin = CurrentPin)
     {
