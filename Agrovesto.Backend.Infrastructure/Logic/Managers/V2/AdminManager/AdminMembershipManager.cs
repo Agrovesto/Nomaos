@@ -44,6 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<MembershipStatusChangeResult> ReactivateMembershipAsync(long businessId, long membershipId, string actingUserId, CancellationToken ct);
         Task<MembershipStatusChangeResult> SuspendMembershipAsync(long businessId, long membershipId, string? reason, string actingUserId, CancellationToken ct);
     }
+ 
     public class AdminMembershipManager : IAdminMembershipManager
     {
         private readonly IAWSService _email;
@@ -72,6 +73,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             _onboardingRepository = onboardingRepository;
             _email = aWSService;
             _smsService = smsService;
+        }
+        private static class MemberStatusLabel
+        {
+            public const string Verified = "Verified";
+            public const string Pending = "Pending";
+            public const string Suspended = "Suspended";
         }
         private IQueryable<MemberShip> MembershipsInBusiness(long businessId)
         {
@@ -114,50 +121,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             return q;
         }
-        private static readonly Expression<Func<MemberShip, bool>> IsVerified =
-      f => (f.User.IsPhoneVerified && f.User.IsNinVerified);
+        private static string ResolveStatus(MembershipStatus status, bool isVerified) =>
+      status == MembershipStatus.Suspended ? MemberStatusLabel.Suspended
+      : (status == MembershipStatus.Active && isVerified) ? MemberStatusLabel.Verified
+      : MemberStatusLabel.Pending;
 
-
-        //public async Task<MemberShipSummaryDto> GetSummaryAsync(long businessId)
-        //{
-        //    var q = MembershipsInBusiness(businessId);
-
-        //    var total = await q.CountAsync();
-        //    var verified = await q.CountAsync(IsVerified);
-        //    var suspended = await q.CountAsync(f => f.MembershipStatus == MembershipStatus.Suspended);
-        //    var pending = total - verified;
-
-        //    int Count(MembershipStatus s) => q.Count(f => f.MembershipStatus == s);
-
-
-        //    return new MemberShipSummaryDto
-        //    {
-        //        TotalMemberShipBodies = total,
-        //        TotalActiveMembers = Count(MembershipStatus.Active),
-        //        TotalPendingApproval = pending,
-        //        TotalSuspendedMembers = Count(MembershipStatus.Suspended),
-        //        TotalLinkedOrganizations= await _context.OrganizationMemberships
-        //            .Where(om => q.Any(f => f.Id == om.MembershipId))
-        //            .Select(om => om.OrganizationId)
-        //            .Distinct()
-        //            .CountAsync(),
-        //        TotalMembers= await _context.FarmerCooperatives
-        //            .Where(fc => q.Any(f => f.Id == fc.FarmerId))
-        //            .Select(fc => fc.FarmerId)
-        //            .Distinct()
-        //            .CountAsync()
-        //    };
-        //}
+        // ---------- summary ----------
         public async Task<MemberShipSummaryDto> GetSummaryAsync(long businessId)
         {
             var q = MembershipsInBusiness(businessId);
 
-            var byStatus = await q
-                .GroupBy(m => m.MembershipStatus)
-                .Select(g => new { Status = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.Status, x => x.Count);
+            var grouped = await q
+                .GroupBy(m => new
+                {
+                    m.MembershipStatus,
+                    IsVerified = m.User.IsPhoneVerified && m.User.IsNinVerified
+                })
+                .Select(g => new
+                {
+                    g.Key.MembershipStatus,
+                    g.Key.IsVerified,
+                    Count = g.Count()
+                })
+                .ToListAsync();
 
-            int Get(MembershipStatus s) => byStatus.GetValueOrDefault(s);
+            var byStatus = grouped
+                .GroupBy(x => ResolveStatus(x.MembershipStatus, x.IsVerified))
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
+
+            int Get(string s) => byStatus.GetValueOrDefault(s);
 
             var linkedOrgs = await _context.OrganizationMemberships
                 .Where(om => q.Any(m => m.Id == om.MembershipId))
@@ -166,7 +158,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .CountAsync();
 
             var totalMembers = await _context.FarmerCooperatives
-                .Where(fc => q.Any(m => m.Id == fc.CooperativeId))   // was fc.FarmerId
+                .Where(fc => q.Any(m => m.Id == fc.CooperativeId))
                 .Select(fc => fc.FarmerId)
                 .Distinct()
                 .CountAsync();
@@ -174,13 +166,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             return new MemberShipSummaryDto
             {
                 TotalMemberShip = byStatus.Values.Sum(),
-                TotalActiveMemberShip = Get(MembershipStatus.Active),
-                TotalPendingApproval = Get(MembershipStatus.Pending),
-                TotalSuspendedMembers = Get(MembershipStatus.Suspended),
+                TotalActiveMemberShip = Get(MemberStatusLabel.Verified),
+                TotalPendingApproval = Get(MemberStatusLabel.Pending),
+                TotalSuspendedMembers = Get(MemberStatusLabel.Suspended),
                 TotalLinkedOrganizations = linkedOrgs,
                 TotalMembers = totalMembers
             };
         }
+
+        // ---------- list ----------
         public async Task<PagedResult<MemberShipListItemDto>> GetMembershipsAsync(MemberShipListQuery p)
         {
             var page = Math.Max(p.PageNumber, 1);
@@ -200,7 +194,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     m.UserId,
                     MemberShipName = m.Name,
                     MemberShipType = m.MemberShipType.Name,
-                    m.State,                      
+                    m.State,
                     m.OnBoardedOn,
                     m.MembershipStatus,
                     IsVerified = m.User.IsPhoneVerified && m.User.IsNinVerified
@@ -239,66 +233,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 Members = memberCounts.GetValueOrDefault(r.Id),
                 LinkedOrganizations = orgCounts.GetValueOrDefault(r.Id),
                 RegDate = r.OnBoardedOn,
-                Status = r.MembershipStatus == MembershipStatus.Suspended ? "Suspended"
-                       : r.IsVerified && r.MembershipStatus == MembershipStatus.Active ? "Verified"
-                       : "Pending"
+                Status = ResolveStatus(r.MembershipStatus, r.IsVerified)
             }).ToList();
 
             return new PagedResult<MemberShipListItemDto>(items, page, size, total);
         }
-
-
-        //public async Task<PagedResult<MemberShipListItemDto>> GetMembershipsAsync(MemberShipListQuery p)
-        //{
-        //    var page = Math.Max(p.PageNumber, 1);
-        //    var size = Math.Clamp(p.PageSize, 1, 100);
-
-        //    var q = ApplyFilters(MembershipsInBusiness(p.BusinessId), p);
-        //    var total = await q.CountAsync();
-
-        //    var rows = await q
-        //        .OrderByDescending(f => f.OnBoardedOn)
-        //        .ThenByDescending(f => f.Id)
-        //        .Skip((page - 1) * size)
-        //        .Take(size)
-        //        .Select(f => new { f.Id, f.Name, f.PhoneNumber, f.OnBoardedOn, f.MembershipStatus, f.UserId })
-        //        .ToListAsync();
-
-        //    var ids = rows.Select(r => r.Id).ToList();
-
-        //    var farmerCounts = await _context.FarmerAgents
-        //        .Where(x => ids.Contains(x.FarmerId))
-        //        .GroupBy(x => x.AgentId)
-        //        .Select(g => new { FarmerId = g.Key, Count = g.Count() })
-        //        .ToDictionaryAsync(x => x.FarmerId, x => x.Count);
-
-        //    var orgs = (await (from fo in _context.OrganizationAgents
-        //                       join o in _context.Organizations on fo.OrganizationId equals o.OrganizationId
-        //                       where ids.Contains(fo.AgentId) && fo.IsActive
-        //                       select new { fo.AgentId, o.CompanyName, o.OrganizationCode }).ToListAsync())
-        //     .ToLookup(x => x.AgentId);
-
-
-        //    var items = rows.Select(r => new MemberShipListItemDto
-        //    {
-        //        Id = r.Id,
-        //        AgentId = r.UserId,
-        //        FullName = r.Name,
-        //        PhoneNumber = r.PhoneNumber,
-        //        RegDate = r.OnBoardedOn,
-        //        Status = EnumExtensions.GetDisplayName(r.MembershipStatus),
-        //        Members = farmerCounts.GetValueOrDefault(r.Id),
-
-        //        Organization = string.Join(", ", orgs[r.Id].Select(o => o.CompanyName).Distinct()),
-        //        OrganizationCode = string.Join(", ", orgs[r.Id].Select(o => o.OrganizationCode).Distinct()),
-        //    }).ToList();
-
-        //    return new PagedResult<MemberShipListItemDto>(items,  page, size, total);
-        //}
-
-        private static readonly Regex PhoneRegex = new(@"^\+?\d{10,15}$", RegexOptions.Compiled);
-        private const string DefaultCountryCode = "234";   // or read from config, like your SMS CountryCode setting
-
        
         #region createmembership
         public async Task<(bool status, string msg, MemberShipListItemDto data)> CreateMembershipAsync(
@@ -1099,6 +1038,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .Take(pageSize)
                 .Select(s => new
                 {
+                    PackageId = s.InputPackageId,
                     Package = s.InputPackage.Name,
                     Organization = (s.Organization ?? s.InputPackage.Organization).CompanyName,
                     Value = s.TotalFinancingValue,
@@ -1111,6 +1051,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             var items = rows.Select(r => new MembershipInputFinancePackageDto
             {
+                PackageId=r.PackageId,
                 PackageName = r.Package,
                 Farmers = r.Farmers,
                 Organization = r.Organization,

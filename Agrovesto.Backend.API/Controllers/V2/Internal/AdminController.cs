@@ -1017,13 +1017,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             var result = await _membershipManager.SuspendMembershipAsync(
                 businessId, membershipId, request?.Reason, actingUserId, ct);
+            if (result == null)
+                return BadRequest(new Response<MembershipStatusChangeResult> { Succeeded = false, 
+                    Message = "Could not suspend membership." });
+            return Ok(new Response<MembershipStatusChangeResult> { Succeeded = true, Data = result });
 
-            return Ok(new Response<MembershipStatusChangeResult>
-            {
-                Succeeded = true,
-                Data = result,
-                Message = result.Message
-            });
         }
 
         [HttpPost("membership/{membershipId}/reactivate")]
@@ -1037,13 +1035,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             var result = await _membershipManager.ReactivateMembershipAsync(
                 businessId, membershipId, actingUserId, ct);
-
-            return Ok(new Response<MembershipStatusChangeResult>
-            {
-                Succeeded = true,
-                Data = result,
-                Message = result.Message
-            });
+            if (result == null)
+                return BadRequest(new Response<MembershipStatusChangeResult>
+                {
+                    Succeeded = false,
+                    Message = "Could not reactivate membership."
+                });
+            return Ok(new Response<MembershipStatusChangeResult> { Succeeded = true, Data = result });
         }
 
         #endregion membership
