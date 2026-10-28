@@ -97,6 +97,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model);
         Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model);
         Task<(bool Status, string Message)> ForgotPassword(string username);
+        Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName);
 
         Task<bool> ResetPin(ConfirmOtpRequest request);
         Task<(bool Status, string Message)> ForgotPin(string phoneNumber, string businessCode, string env);
@@ -165,7 +166,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _awsService = awsService;
         }
 
-
+        public async Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName)
+        {
+            return await _onboardingRepository.OnRegistrationAsync(model, roleName);
+        }
         public async Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(
          Stream excelStream,
          OnBoardingArgs args)

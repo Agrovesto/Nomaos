@@ -61,6 +61,55 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _adminDashboardManager = adminDashboardManager;
             _adminUserManagementManager = adminUserManagementManager;
         }
+        /// <summary>
+        /// Seed a system/super admin user. This is intended for initial seeding and should be protected in production.
+        /// </summary>
+        [HttpPost("auth/seed-super-admin")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SeedSuperAdmin([FromQuery] string businessCode)
+        {
+            try
+            {
+                // If caller did not supply a model use a default seed (matches existing DB initializer defaults)
+                var seed = new UserModel
+                {
+                    Email = "reloarhub@maildrop.cc",
+                    Password = "Reloarhub144828@",
+                    PhoneNumber = "01126201565",
+                    UserType = "Agrovesto",
+                    FirstName = "Reloarhub Solutions",
+                    BusinessCode = businessCode
+                };
+
+                var result = await _onBoardingManager.RegisterAdmin(seed, "SystemAdmin");
+
+                return result.status
+                    ? Ok(new Response<(UserModel model, bool status, string message)>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = true,
+                        Message = result.message,
+                        Data = result
+                    })
+                    : BadRequest(new Response<string> { Succeeded = false, Message = result.message, Code = ResponseCodes.Failed });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode((int)ex.HttpStatusCode, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
 
         #region settings
 
