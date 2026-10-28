@@ -2,7 +2,7 @@ name: Build and Deploy (master branch)
 
 on:
   push:
-    branches: []
+    branches: [nomaos_lola_admin]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
