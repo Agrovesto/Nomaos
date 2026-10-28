@@ -1308,6 +1308,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private async Task GenerateAndSendOtp(OnboardingRequestModel model, string businessCode)
         {
             var senderEmail = _configuration["Official:Email"];
+            var adminConsoleUrl = _configuration["AdminPanel:PortalBaseUrl"];
             var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
                 ? OtpTarget.Email
                 : OtpTarget.Phone;
@@ -1344,13 +1345,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         $"Your verification code is {otp.Code}. Expires in 5 minutes.",
                         businessCode);
             }
+            var (subject, html, text) = NewRegistrationEmailTemplate.Build(
+    model.Env, model.Email, model.PhoneNumber, adminConsoleUrl);
             await _awsService.SendEmailAsync(
-                  senderEmail,
-                  "agrovesto@gmail.com",
-                  $"New Registration Alert on NomaOS {model.Env} environment",
-                  $"New registration from {model.Email} {model.PhoneNumber}. Login to Admin Console for details.",
-                  $"New registration from {model.Email} {model.PhoneNumber}. Login to Admin Console for details."
-                  );
+         senderEmail,
+         "agrovesto@gmail.com",
+         subject,
+         html,
+         text);
         }
 
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)

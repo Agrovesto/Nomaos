@@ -158,7 +158,6 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public DateTimeOffset RegistrationDate { get; set; }
         public bool CanSuspend { get; set; }              // drives "Suspend Membership" button
         public bool CanReactivate { get; set; }
-        public string MembershipRepresentaiveId { get; set; }
         public string RegistrationNumber { get; set; }
     }
 

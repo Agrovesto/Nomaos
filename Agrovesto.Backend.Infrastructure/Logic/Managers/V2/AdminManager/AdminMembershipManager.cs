@@ -30,7 +30,7 @@ using static QRCoder.PayloadGenerator;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 {
-  
+
     public interface IAdminMembershipManager
     {
         Task<(bool status, string msg, MemberShipListItemDto data)> CreateMembershipAsync(AdminCreateMembershipRequest model, AdminOnBoardingArgs args, CancellationToken ct);
@@ -44,7 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<MembershipStatusChangeResult> ReactivateMembershipAsync(long businessId, long membershipId, string actingUserId, CancellationToken ct);
         Task<MembershipStatusChangeResult> SuspendMembershipAsync(long businessId, long membershipId, string? reason, string actingUserId, CancellationToken ct);
     }
- 
+
     public class AdminMembershipManager : IAdminMembershipManager
     {
         private readonly IAWSService _email;
@@ -238,7 +238,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             return new PagedResult<MemberShipListItemDto>(items, page, size, total);
         }
-       
+
         #region createmembership
         public async Task<(bool status, string msg, MemberShipListItemDto data)> CreateMembershipAsync(
             AdminCreateMembershipRequest model, AdminOnBoardingArgs args, CancellationToken ct)
@@ -407,8 +407,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                         UserId = leaderUserId,
                         MemberShipTypeId = type.Id,
                         PhoneNumber = model.PhoneNumber,
-                        MembershipStatus = MembershipStatus.Pending,
-                        OnBoardedOn = dateTime
+                        MembershipStatus = MembershipStatus.Active,
+                        OnBoardedOn = dateTime,
+                        BelongToBusinessCode = args.businessCode,
+                        TierLevel = Tier.None,
+                        OnboardedById = args.OnboardedByUserId,
+                        IsActive = true,
+                        IsLeaderAFarmer = model.IsLeaderAFarmer
                         // OnboardedByUserId = args.OnboardedByUserId (if the entity has it)
                     };
                     _context.MemberShips.Add(membership);
@@ -636,7 +641,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     .Where(x => !string.IsNullOrWhiteSpace(x)));
 
             var status = ResolveStatusLabel(m.MembershipStatus, m.IsVerified);
-      
+
 
             return new MemberShipOverviewDto
             {
@@ -651,7 +656,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 GeneralInformation = new MembershipGeneralInfoDto
                 {
                     Name = m.Name,
-                    MembershipRepresentaiveId = m.UserId,
                     MembershipType = m.TypeName,
                     RegistrationNumber = "N/A",        // no column yet, see notes
                     RegistrationDate = m.OnBoardedOn,
@@ -670,9 +674,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 },
                 Address = new MembershipAddressDto
                 {
-                  //  Country = "Nigeria",
+                    //  Country = "Nigeria",
                     State = m.State,
-                    Lga =  m.Lga,
+                    Lga = m.Lga,
                     Address = m.Location,
                     PostalCode = "N/A"                 // no column yet, see notes
                 },
@@ -702,7 +706,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             : isVerified ? "Verified"
             : "Pending";
 
-       
+
         public async Task<MembershipMembersResponse> GetMembershipMembersAsync(
         long businessId, long membershipId, string? search, int pageNumber, int pageSize)
         {
@@ -895,7 +899,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             };
         }
 
-      
+
         public async Task<MembershipAgentsResponse> GetMembershipAgentsAsync(long businessId, long membershipId)
         {
             var exists = await MembershipsInBusiness(businessId).AnyAsync(m => m.Id == membershipId);
@@ -1051,7 +1055,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             var items = rows.Select(r => new MembershipInputFinancePackageDto
             {
-                PackageId=r.PackageId,
+                PackageId = r.PackageId,
                 PackageName = r.Package,
                 Farmers = r.Farmers,
                 Organization = r.Organization,
@@ -1066,7 +1070,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 Summary = summary,
                 Packages = new Core.Models.Admin.PagedResult<MembershipInputFinancePackageDto>(
                                items, page, pageSize, packagesFacilitated),
-            
+
             };
         }
 
@@ -1079,9 +1083,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             => ChangeMembershipStatusAsync(businessId, membershipId, suspend: false, null, actingUserId, ct);
 
         private async Task<MembershipStatusChangeResult> ChangeMembershipStatusAsync(
-            long businessId, long membershipId, bool suspend, string? reason,
-           string actingUserId,
-            CancellationToken ct)
+         long businessId, long membershipId, bool suspend, string? reason,
+         string actingUserId,
+         CancellationToken ct)
         {
             reason = reason?.Trim();
 
@@ -1093,11 +1097,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     throw new BaseException(ExceptionType.BAD_REQUEST, "Reason must not exceed 500 characters.");
             }
 
-            // Tracked entity, scoped to this business
+            // Tracked entity, scoped to this business (no MembershipsInBusiness here, see note below)
             var membership = await _context.MemberShips
+                .AsTracking()
                 .Include(m => m.User)
                 .Where(m => m.Id == membershipId)
-                .Where(m => MembershipsInBusiness(businessId).Any(x => x.Id == m.Id))
+                .Where(m => _context.UserBusinesses.Any(ub =>
+                    ub.UserId == m.UserId &&
+                    ub.BusinessId == businessId &&
+                    ub.IsActive))
                 .FirstOrDefaultAsync(ct);
 
             if (membership == null)
@@ -1115,7 +1123,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             if (membership.User != null)
                 membership.User.DateModified = DateTimeOffset.UtcNow;
 
-            await _context.SaveChangesAsync(ct);
+            var saved = await _context.SaveChangesAsync(ct);
+            if (saved == 0)
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR,
+                    "The membership status could not be saved.");
 
             // Audit (also feeds the Activity Timeline); the status change is already saved,
             // so a failure here is logged with the reason rather than failing the request.
@@ -1149,5 +1160,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                                   : "Membership reactivated successfully."
             };
         }
+
     }
 }
