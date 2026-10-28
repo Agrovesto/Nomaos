@@ -136,6 +136,75 @@ public class NomaosTelemetryTests : IDisposable
     }
 
     [Fact]
+    public void RecordMoney_EmitsAnIntegerHistogramWithOperationAndOutcome()
+    {
+        var (counters, histograms) = Collect(() => _telemetry.RecordMoney("disbursement", "success", 250_000));
+
+        // A long measurement lands in the helper's "counters" list because the
+        // callback is registered per measurement *type*, not per instrument kind
+        // — which is also why money is a long: NGN subunits must not round.
+        counters.Should().ContainSingle()
+            .Which.Should().Be(("nomaos.money.amount", 250_000L, "success"));
+        histograms.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-250_000)]
+    public void RecordMoney_RelabelsANegativeAmountInsteadOfThrowingOrDroppingIt(long amountKobo)
+    {
+        // Telemetry on a payment path must never fail the payment, and it must
+        // never silently vanish either: zero under "invalid" keeps the event
+        // visible in Grafana and greppable as a call-site bug.
+        var (counters, _) = Collect(() => _telemetry.RecordMoney("refund", "failure", amountKobo));
+
+        counters.Should().ContainSingle()
+            .Which.Should().Be(("nomaos.money.amount", 0L, "invalid"));
+    }
+
+    [Fact]
+    public void RecordMoney_DefaultsBlankDimensionsToUnknown()
+    {
+        string? operation = null;
+        string? outcome = null;
+
+        using var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, l) =>
+            {
+                if (instrument.Meter.Name == _uniqueName && instrument.Name == "nomaos.money.amount")
+                {
+                    l.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            foreach (var tag in tags)
+            {
+                if (tag.Key == "nomaos.money.operation")
+                {
+                    operation = tag.Value?.ToString();
+                }
+
+                if (tag.Key == "nomaos.outcome")
+                {
+                    outcome = tag.Value?.ToString();
+                }
+            }
+        });
+
+        listener.Start();
+        _telemetry.RecordMoney("  ", string.Empty, 500);
+
+        // Two blanks would otherwise produce an unlabelled series nobody can
+        // filter on.
+        operation.Should().Be("unknown");
+        outcome.Should().Be("unknown");
+    }
+
+    [Fact]
     public void TrackAsync_RecordsSuccessAndReturnsTheResult()
     {
         var result = 0;
