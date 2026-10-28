@@ -2,7 +2,7 @@ name: Build and Deploy (staging branch)
 
 on:
   push:
-    branches: [nomaos_lola_admin]
+    branches: []
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
