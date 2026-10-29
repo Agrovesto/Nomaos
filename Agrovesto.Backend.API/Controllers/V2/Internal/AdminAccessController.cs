@@ -22,10 +22,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _access = access;
         }
 
-
+        [AllowAnonymous]
         // ---- Roles ----
         [HttpGet("roles")]
-        [HasPermission(Permissions.Roles.Manage)]
+        //[HasPermission(Permissions.Roles.Manage)]
         public async Task<IActionResult> ListRoles(CancellationToken ct) => Respond(await _access.ListRolesAsync(ct));
 
         [HttpGet("roles/{id}")]

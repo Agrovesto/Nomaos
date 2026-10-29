@@ -7,15 +7,20 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Services.RolePermissionService;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Runtime.Internal.Util;
+using DocumentFormat.OpenXml.Bibliography;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Org.BouncyCastle.Ocsp;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
@@ -33,7 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<IReadOnlyList<AdminRoleOptionDto>> GetAssignableRolesAsync(CancellationToken ct);
         Task<InviteResult> InviteAsync(InviteAdminUserRequest req, string invitedByUserId, CancellationToken ct);
         Task<InviteResult> ResendAsync(string userId, string invitedByUserId, CancellationToken ct);
-        Task<AcceptResult> AcceptAsync(AcceptInviteRequest req, CancellationToken ct);   // new
+        Task<AcceptResult> AcceptAsync(AcceptInviteRequest req, CancellationToken ct);
         Task<AccessResult<AdminUserStatusDto>> DeactivateUserAsync(string userId, string actingUserId, CancellationToken ct);
         Task<AccessResult<AdminUserDetailDto>> GetUserDetailAsync(string adminId, string actingUserId, CancellationToken ct);
         Task<AccessResult<AdminUserAccessDto>> GetUserAccessAsync(string adminId, string actingUserId, CancellationToken ct);
@@ -245,6 +250,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             .ToListAsync(ct);
 
 
+        // ---------------------------------------------------------------------------
+        // InviteAsync: complete version
+        //  - New email            -> creates a Pending, inactive admin user + role + invitation, sends invite email
+        //  - Existing admin user  -> adds the new role only (no error, no new user, no email)
+        //  - Existing pending     -> 409 (use Resend invitation)
+        //  - Existing non-admin   -> 409 (promotion to admin is a separate, deliberate decision)
+        //  - Audit failures never fail an operation that has already been committed
+        // ---------------------------------------------------------------------------
+
+        // ===========================================================================
+        // ADMIN INVITE + ACCEPT: complete code
+        //
+        // Contents
+        //   1. InviteAsync                      new email -> pending invited admin
+        //                                       existing email -> add role / promote
+        //                                       phone-as-email account -> switch to real email + invite
+        //   2. AddRoleToExistingUserAsync       existing user found by email
+        //   3. UpgradePhoneAccountAsync         legacy account whose email/username is the phone number
+        //   4. AcceptInviteAsync                invited user sets a password and becomes Active
+        //   5. Helpers                          TryAuditAsync, PhoneVariants, FailAccept, DTOs
+        //
+        // Required model changes
+        //   - InviteAdminUserResponse.ExpiresAt          -> DateTimeOffset?
+        //   - AdminInvitation.AcceptedAt (DateTimeOffset?) -> new column + migration
+        //   - Unique index on AdminInvitations.TokenHash
+        //   - Unique index on UserRoles (UserId, RoleId, BusinessId)
+        //   - Admin login must require Status == Active (not only IsAdminUser)
+        // ===========================================================================
+
+
+        // ---------------------------------------------------------------------------
+        // 1. InviteAsync
+        // ---------------------------------------------------------------------------
         public async Task<InviteResult> InviteAsync(InviteAdminUserRequest req, string invitedByUserId, CancellationToken ct)
         {
             var email = req.Email.Trim().ToLowerInvariant();
@@ -257,15 +295,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 (r.BusinessId == null || r.BusinessId == _opts.BusinessId), ct);
             if (role is null) return Fail(400, "Please select a role.");
 
+            var variants = PhoneVariants(phone);
+
+            // ---- Existing email: add the role (or promote) instead of failing ----
             var existing = await _users.FindByEmailAsync(email);
             if (existing is not null)
-                return existing.IsAdminUser && existing.Status == AdminUserStatus.Pending
-                    ? Fail(409, "This email already has a pending invitation. Use Resend invitation instead.")
-                    : Fail(409, "A user with this email already exists.");
+            {
+                // The phone may only belong to this same user
+                var phoneBelongsToAnother = await _db.Users.AnyAsync(u =>
+                    u.PhoneNumber != null && variants.Contains(u.PhoneNumber) && u.Id != existing.Id, ct);
 
-            if (await _db.Users.AnyAsync(u => u.PhoneNumber == phone, ct))
-                return Fail(409, "A user with this phone number already exists.");
+                if (phoneBelongsToAnother)
+                    return Fail(409, "This phone number is already registered to a different user, not the owner of this email.");
 
+                return await AddRoleToExistingUserAsync(existing, role, email, invitedByUserId, ct);
+            }
+
+            // ---- New email: who owns this phone number? ----
+            var phoneOwners = await _db.Users.AsNoTracking()
+                .Where(u => u.PhoneNumber != null && variants.Contains(u.PhoneNumber))
+                .Select(u => new { u.Id, u.Email })
+                .ToListAsync(ct);
+
+            if (phoneOwners.Count > 1)
+                return Fail(409, "More than one account uses this phone number. Resolve the duplicates first.");
+
+            if (phoneOwners.Count == 1)
+            {
+                var owner = phoneOwners[0];
+                var emailIsPlaceholder = string.IsNullOrWhiteSpace(owner.Email) || !owner.Email.Contains('@');
+
+                if (!emailIsPlaceholder)
+                    return Fail(409, "This phone number is already registered to a different user, not the owner of this email.");
+
+                // Legacy account (email/username == phone): switch to the real email and invite
+                return await UpgradePhoneAccountAsync(owner.Id, req, email, role, invitedByUserId, ct);
+            }
+
+            // ---- Brand-new user ----
             var rawToken = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
             var now = DateTimeOffset.UtcNow;
             var expires = now.AddDays(_opts.InviteExpiryDays);
@@ -356,19 +423,459 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             });
 
             if (failure is not null) return failure;
-            await _audit.LogAsync(
+
+            // Audit must never fail an invite that has already been committed
+            await TryAuditAsync(
                 "UserInvited",
                 invitedByUserId,
                 user!.Id,
                 $"Invited user to login as Role: {role.Name}",
-                AdminActiviLogModule.AdminPanel.UserMgt,
-                 $"{email}"
+                email);
 
-                );   // here
             // Send after commit so a mail outage never leaves a half-created user
             var sent = await TrySendInviteAsync(user!, rawToken, expires, role.Name);
 
             return new(new InviteAdminUserResponse(user!.Id, user.AdminCode!, "Pending", sent, expires), null, 201);
+        }
+
+
+        // ---------------------------------------------------------------------------
+        // 2. Existing user found by email
+        //    - Pending admin invite   -> 409 (use Resend invitation)
+        //    - Deactivated account    -> 409 (reactivate first)
+        //    - Not yet an admin       -> promoted: IsAdminUser = true, new ADM code, Status = Active, role added
+        //    - Already an admin       -> role added (or reactivated if previously revoked)
+        //    - Already has the role   -> 409
+        // ---------------------------------------------------------------------------
+        private async Task<InviteResult> AddRoleToExistingUserAsync(
+            User existing, Role role, string email, string invitedByUserId, CancellationToken ct)
+        {
+            if (existing.IsAdminUser && existing.Status == AdminUserStatus.Pending)
+                return Fail(409, "This email already has a pending invitation. Use Resend invitation instead.");
+
+            if (!existing.IsActive)
+                return Fail(409, "This account is deactivated. Reactivate it before assigning a role.");
+
+            var existingId = existing.Id;
+            var businessId = _opts.BusinessId;
+
+            InviteResult? failure = null;
+            var promoted = false;
+            string? adminCode = null;
+
+            var strategy = _db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                _db.ChangeTracker.Clear();
+                failure = null;
+                promoted = false;
+                adminCode = null;
+
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+                var user = await _db.Users.FirstAsync(u => u.Id == existingId, ct);
+
+                // 1. Promote to admin if they are not one yet
+                if (!user.IsAdminUser)
+                {
+                    var seq = new AdminCodeSequence();
+                    _db.Add(seq);
+                    await _db.SaveChangesAsync(ct);
+
+                    user.IsAdminUser = true;
+                    user.AdminCode = $"ADM{seq.Id:D6}";
+                    user.Status = AdminUserStatus.Active;
+                    promoted = true;
+                }
+
+                // 2. Add (or reactivate) the role
+                var userRole = await _db.UserRoles.FirstOrDefaultAsync(ur =>
+                    ur.UserId == user.Id && ur.RoleId == role.Id && ur.BusinessId == businessId, ct);
+
+                if (userRole is { IsActive: true })
+                {
+                    failure = Fail(409, $"This user already has the {role.Name} role.");
+                    return;                                   // no commit, so everything rolls back
+                }
+
+                if (userRole is null)
+                {
+                    _db.UserRoles.Add(new ApplicationUserRole
+                    {
+                        UserId = user.Id,
+                        RoleId = role.Id,
+                        BusinessId = businessId,
+                        IsActive = true
+                    });
+                }
+                else
+                {
+                    userRole.IsActive = true;                 // previously revoked, so reactivate
+                }
+
+                // 3. Make sure they are linked to this business
+                var linked = await _db.UserBusinesses.AnyAsync(ub =>
+                    ub.UserId == user.Id && ub.BusinessId == businessId, ct);
+                if (!linked)
+                {
+                    var hasDefault = await _db.UserBusinesses.AnyAsync(ub =>
+                        ub.UserId == user.Id && ub.IsDefault, ct);
+
+                    _db.UserBusinesses.Add(new UserBusiness
+                    {
+                        UserId = user.Id,
+                        BusinessId = businessId,
+                        IsActive = true,
+                        IsDefault = !hasDefault               // don't steal an existing default business
+                    });
+                }
+
+                user.DateModified = DateTimeOffset.UtcNow;
+                adminCode = user.AdminCode;
+
+                try { await _db.SaveChangesAsync(ct); }
+                catch (DbUpdateException ex)                  // double-click / concurrent request race
+                {
+                    _log.LogWarning(ex, "Role assignment conflict for {Email}", email);
+                    failure = Fail(409, "This user already has this role.");
+                    return;
+                }
+
+                await tx.CommitAsync(ct);
+            });
+
+            if (failure is not null) return failure;
+
+            await TryAuditAsync(
+                promoted ? "UserPromotedToAdmin" : "UserRoleAdded",
+                invitedByUserId,
+                existingId,
+                promoted
+                    ? $"Existing user promoted to admin with Role: {role.Name}"
+                    : $"Added role: {role.Name} to existing admin user",
+                email);
+
+            // No invite email: the user already has an active account.
+            return new(new InviteAdminUserResponse(
+                existingId, adminCode!, "RoleAdded", false, null), null, 200);
+        }
+
+
+        // ---------------------------------------------------------------------------
+        // 3. Legacy account whose email/username is the phone number
+        //    Switches UserName/Email (and their normalized columns) to the real email,
+        //    makes the user a Pending admin, and sends a normal invite.
+        //    The password is created when the invite is accepted.
+        // ---------------------------------------------------------------------------
+        private async Task<InviteResult> UpgradePhoneAccountAsync(
+            string legacyUserId, InviteAdminUserRequest req, string email, Role role,
+            string invitedByUserId, CancellationToken ct)
+        {
+            // The new email must not already be a username of someone else
+            if (await _users.FindByNameAsync(email) is not null)
+                return Fail(409, "A user with this email already exists.");
+
+            var rawToken = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+            var now = DateTimeOffset.UtcNow;
+            var expires = now.AddDays(_opts.InviteExpiryDays);
+
+            User? user = null;
+            InviteResult? failure = null;
+
+            var strategy = _db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                _db.ChangeTracker.Clear();
+                user = null;
+                failure = null;
+
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+                user = await _db.Users.FirstAsync(u => u.Id == legacyUserId, ct);
+
+                // Re-check inside the transaction: someone may have fixed the email in the meantime
+                if (!string.IsNullOrWhiteSpace(user.Email) && user.Email.Contains('@'))
+                {
+                    failure = Fail(409, "This account already has an email address.");
+                    return;
+                }
+
+                // 1. Switch credentials to the real email.
+                //    These calls also update NormalizedUserName and NormalizedEmail.
+                var setName = await _users.SetUserNameAsync(user, email);
+                if (!setName.Succeeded)
+                {
+                    failure = Fail(400, string.Join(" ", setName.Errors.Select(e => e.Description)));
+                    return;
+                }
+
+                var setEmail = await _users.SetEmailAsync(user, email);   // also sets EmailConfirmed = false
+                if (!setEmail.Succeeded)
+                {
+                    failure = Fail(400, string.Join(" ", setEmail.Errors.Select(e => e.Description)));
+                    return;
+                }
+
+                // 2. Make them an admin (pending until the invite is accepted)
+                if (string.IsNullOrEmpty(user.AdminCode))
+                {
+                    var seq = new AdminCodeSequence();
+                    _db.Add(seq);
+                    await _db.SaveChangesAsync(ct);
+                    user.AdminCode = $"ADM{seq.Id:D6}";
+                }
+
+                user.IsAdminUser = true;
+                user.Status = AdminUserStatus.Pending;
+                user.IsEmailVerified = false;
+                user.DateModified = now;
+                // IsActive, UserType and PhoneNumber are intentionally untouched so the user keeps
+                // their existing app access; the admin login must require Status == Active.
+
+                if (string.IsNullOrWhiteSpace(user.FirstName)) user.FirstName = req.FirstName.Trim();
+                if (string.IsNullOrWhiteSpace(user.LastName)) user.LastName = req.LastName.Trim();
+                if (string.IsNullOrWhiteSpace(user.Name)) user.Name = $"{user.FirstName} {user.LastName}".Trim();
+
+                // 3. Role, business link and invitation
+                var hasRole = await _db.UserRoles.AnyAsync(ur =>
+                    ur.UserId == user.Id && ur.RoleId == role.Id && ur.BusinessId == _opts.BusinessId, ct);
+                if (!hasRole)
+                {
+                    _db.UserRoles.Add(new ApplicationUserRole
+                    {
+                        UserId = user.Id,
+                        RoleId = role.Id,
+                        BusinessId = _opts.BusinessId,
+                        IsActive = true
+                    });
+                }
+
+                var linked = await _db.UserBusinesses.AnyAsync(ub =>
+                    ub.UserId == user.Id && ub.BusinessId == _opts.BusinessId, ct);
+                if (!linked)
+                {
+                    var hasDefault = await _db.UserBusinesses.AnyAsync(ub =>
+                        ub.UserId == user.Id && ub.IsDefault, ct);
+
+                    _db.UserBusinesses.Add(new UserBusiness
+                    {
+                        UserId = user.Id,
+                        BusinessId = _opts.BusinessId,
+                        IsActive = true,
+                        IsDefault = !hasDefault
+                    });
+                }
+
+                _db.AdminInvitations.Add(new AdminInvitation
+                {
+                    UserId = user.Id,
+                    TokenHash = Hash(rawToken),
+                    SentAt = now,
+                    ExpiresAt = expires,
+                    InvitedByUserId = invitedByUserId
+                });
+
+                try { await _db.SaveChangesAsync(ct); }
+                catch (DbUpdateException ex)
+                {
+                    _log.LogWarning(ex, "Phone-account upgrade conflict for {Email}", email);
+                    failure = Fail(409, "A user with these details already exists.");
+                    return;
+                }
+
+                await tx.CommitAsync(ct);
+            });
+
+            if (failure is not null) return failure;
+
+            await TryAuditAsync(
+                "UserEmailUpdatedAndInvited",
+                invitedByUserId,
+                user!.Id,
+                $"Existing phone-number account switched to email and invited with Role: {role.Name}",
+                email);
+
+            var sent = await TrySendInviteAsync(user!, rawToken, expires, role.Name);
+
+            return new(new InviteAdminUserResponse(user!.Id, user.AdminCode!, "Pending", sent, expires), null, 201);
+        }
+
+
+        // ---------------------------------------------------------------------------
+        // 4. AcceptInviteAsync
+        //    Called (anonymously) from the link in the invite email.
+        //    Validates the token, sets the password, activates the admin, and burns the token.
+        // ---------------------------------------------------------------------------
+        public async Task<AcceptInviteResult> AcceptInviteAsync(AcceptInviteRequest req, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(req.Token))
+                return FailAccept(400, "This invitation link is invalid.");
+
+            if (string.IsNullOrWhiteSpace(req.Password))
+                return FailAccept(400, "Please enter a password.");
+
+            if (!string.Equals(req.Password, req.ConfirmPassword, StringComparison.Ordinal))
+                return FailAccept(400, "Passwords do not match.");
+
+            var tokenHash = Hash(req.Token.Trim());
+            var now = DateTimeOffset.UtcNow;
+
+            var invitation = await _db.AdminInvitations.AsNoTracking()
+                .FirstOrDefaultAsync(i => i.TokenHash == tokenHash, ct);
+
+            // Same message for "not found" and "already used" so the endpoint reveals nothing
+            if (invitation is null || invitation.AcceptedAt is not null)
+                return FailAccept(400, "This invitation link is invalid or has already been used.");
+
+            if (invitation.ExpiresAt <= now)
+                return FailAccept(410, "This invitation has expired. Please ask an administrator to resend it.");
+
+            var userId = invitation.UserId;
+
+            AcceptInviteResult? failure = null;
+            User? user = null;
+
+            var strategy = _db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                _db.ChangeTracker.Clear();
+                failure = null;
+                user = null;
+
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+                user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+                if (user is null || !user.IsAdminUser)
+                {
+                    failure = FailAccept(400, "This invitation link is invalid.");
+                    return;
+                }
+
+                // Only a pending invite can be accepted; a second use of the link stops here
+                if (user.Status != AdminUserStatus.Pending)
+                {
+                    failure = FailAccept(409, "This invitation has already been accepted.");
+                    return;
+                }
+
+                // 1. Create the password. The user may have no password (new or PIN-only account)
+                //    or an old one (an existing account that was upgraded), so handle both.
+                IdentityResult pwd;
+                if (!await _users.HasPasswordAsync(user))
+                {
+                    pwd = await _users.AddPasswordAsync(user, req.Password);
+                }
+                else
+                {
+                    var resetToken = await _users.GeneratePasswordResetTokenAsync(user);
+                    pwd = await _users.ResetPasswordAsync(user, resetToken, req.Password);
+                }
+
+                if (!pwd.Succeeded)
+                {
+                    // Password policy errors, e.g. "Passwords must have at least one digit"
+                    failure = FailAccept(400, string.Join(" ", pwd.Errors.Select(e => e.Description)));
+                    return;                                   // no commit, so nothing changes
+                }
+
+                // 2. Activate the account
+                user.Status = AdminUserStatus.Active;
+                user.IsActive = true;
+                user.EmailConfirmed = true;
+                user.IsEmailVerified = true;
+                user.HasDefaultPassword = false;
+                user.DateModified = now;
+
+                // 3. Burn this token and any older open ones for the same user
+                var open = await _db.AdminInvitations
+                    .Where(i => i.UserId == userId && i.AcceptedAt == null)
+                    .ToListAsync(ct);
+                foreach (var inv in open) inv.AcceptedAt = now;
+
+                try { await _db.SaveChangesAsync(ct); }
+                catch (DbUpdateException ex)
+                {
+                    _log.LogWarning(ex, "Accept invite conflict for user {UserId}", userId);
+                    failure = FailAccept(409, "Could not complete the invitation. Please try again.");
+                    return;
+                }
+
+                await tx.CommitAsync(ct);
+            });
+
+            if (failure is not null) return failure;
+
+            await TryAuditAsync(
+                "InviteAccepted",
+                user!.Id,                                     // the invited user is the actor
+                user.Id,
+                "Accepted admin invitation and set a password",
+                user.Email ?? string.Empty);
+
+            // The user is not logged in automatically; they sign in on the normal admin login page.
+            return new(new AcceptInviteResponse(user!.Id, user.AdminCode!, user.Email!), null, 200);
+        }
+
+
+        // ---------------------------------------------------------------------------
+        // 5. Helpers and DTOs
+        // ---------------------------------------------------------------------------
+
+        // Failure-tolerant audit: a logging problem never fails an operation that already committed
+   
+        // 08034567891 -> 08034567891, 2348034567891, +2348034567891
+        private static string[] PhoneVariants(string normalized)
+        {
+            var local = normalized.TrimStart('0');
+            return new[] { normalized, $"234{local}", $"+234{local}" };
+        }
+
+        private static AcceptInviteResult FailAccept(int statusCode, string message) =>
+            new(null, message, statusCode);
+
+        public record AcceptInviteRequest(string Token, string Password, string ConfirmPassword);
+        public record AcceptInviteResponse(string UserId, string AdminCode, string Email);
+        public record AcceptInviteResult(AcceptInviteResponse? Data, string? Error, int StatusCode);
+
+
+        // ---------------------------------------------------------------------------
+        // Controller sketch (adapt to your Response<T> pattern)
+        // ---------------------------------------------------------------------------
+        //
+        // [AllowAnonymous]
+        // [HttpPost("accept-invite")]
+        // public async Task<IActionResult> AcceptInvite([FromBody] AcceptInviteRequest req, CancellationToken ct)
+        // {
+        //     var result = await _adminUserManager.AcceptInviteAsync(req, ct);
+        //     return StatusCode(result.StatusCode, new Response<AcceptInviteResponse>
+        //     {
+        //         Succeeded = result.Error is null,
+        //         Message   = result.Error ?? "Your account is ready. You can now sign in.",
+        //         Data      = result.Data
+        //     });
+        // }
+
+        // ---------------------------------------------------------------------------
+        // Failure-tolerant audit helper
+        // ---------------------------------------------------------------------------
+        private async Task TryAuditAsync(
+            string action, string actorId, string targetUserId, string description, string detail)
+        {
+            try
+            {
+                await _audit.LogAsync(
+                    action,
+                    actorId,
+                    targetUserId,
+                    description,
+                    AdminActiviLogModule.AdminPanel.UserMgt,
+                    detail);
+            }
+            catch (Exception ex)
+            {
+                // The business operation already succeeded; don't fail the request over a log write.
+                _log.LogError(ex, "Audit log failed for {Action} on user {UserId}", action, targetUserId);
+            }
         }
         public async Task<InviteResult> ResendAsync(string adminId, string invitedByUserId, CancellationToken ct)
         {
@@ -391,27 +898,59 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             await _audit.LogAsync("InviteResent", invitedByUserId, user.Id, "Resent login invite",AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                          // here
 
 
-            var sent = await TrySendInviteAsync(user, rawToken, invite.ExpiresAt, null);
+            var sent = await TrySendInviteAsync(user, rawToken, invite.ExpiresAt, user.UserType);
             return new(new InviteAdminUserResponse(user.Id, user.AdminCode!, "Pending", sent, invite.ExpiresAt), null, 200);
         }
 
-        private async Task<bool> TrySendInviteAsync(User user, string rawToken, DateTimeOffset expires, string role)
+        // Needs: using System.Net; using System.Globalization;
+        // Also needs BuildInviteEmailHtml(...) and InviteEmailTemplate from AdminInviteEmail.cs in the same class.
+        private async Task<bool> TrySendInviteAsync(User user, string rawToken, DateTimeOffset expires, string? role)
         {
             try
             {
                 var senderEmail = _configuration["Official:Email"];
-                var link = $"{_opts.PortalBaseUrl.TrimEnd('/')}/accept-invite?token={Uri.EscapeDataString(rawToken)}&name={Uri.EscapeDataString(user.FirstName)} {Uri.EscapeDataString(user.LastName)}&email={Uri.EscapeDataString(user.Email)}&role={Uri.EscapeDataString(role)}";
-                var name = WebUtility.HtmlEncode(user.FirstName);
-                var body = $@"<p>Hello {name},</p>
-<p>You have been invited to join the NomaOS Admin Panel.</p>
-<p><a href=""{link}"">Accept invitation and set your password</a></p>
-<p>This link expires on {expires:dd MMM yyyy} and can only be used once.</p>";
+
+                var fullName = $"{user.FirstName} {user.LastName}".Trim();
+
+                // What the user sees in the email when the role has no name
+                var roleDisplay = string.IsNullOrWhiteSpace(role) ? "Admin" : role.Trim();
+
+                // Build the query from parts so a missing value never reaches EscapeDataString as null
+                var query = new List<string>
+        {
+            $"token={Uri.EscapeDataString(rawToken)}",
+            $"name={Uri.EscapeDataString(fullName)}",
+            $"email={Uri.EscapeDataString(user.Email ?? string.Empty)}"
+        };
+                if (!string.IsNullOrWhiteSpace(role))
+                    query.Add($"role={Uri.EscapeDataString(role.Trim())}");
+
+                var link = $"{_opts.PortalBaseUrl.TrimEnd('/')}/accept-invite?{string.Join("&", query)}";
+
+                var expiresText = expires.ToUniversalTime()
+                    .ToString("dddd, dd MMMM yyyy 'at' HH:mm 'UTC'", CultureInfo.InvariantCulture);
+
+                var html = AdminInvitemail.BuildInviteEmailHtml(
+                    firstName: user.FirstName,
+                    role: roleDisplay,
+                    adminCode: user.AdminCode,
+                    link: link,
+                    expiresText: expiresText);
+
+                var text =
+                    $"Hello {user.FirstName},\n\n" +
+                    $"You have been invited to join the NomaOS Admin Panel as {roleDisplay}.\n\n" +
+                    $"Accept your invitation and set your password:\n{link}\n\n" +
+                    $"This link expires on {expiresText} and can only be used once.\n" +
+                    "If you were not expecting this invitation, you can ignore this email.";
+
                 await _email.SendEmailAsync(
                     senderEmail!,
                     user.Email!,
                     "You've been invited to the NomaOS Admin Panel",
-                    body,
-                    body);
+                    html,
+                    text);
+
                 return true;
             }
             catch (Exception ex)
@@ -420,7 +959,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 return false;
             }
         }
-
         private static string Hash(string raw) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
 
         private static string? NormalizePhone(string? input)
@@ -439,49 +977,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
         private static InviteResult Fail(int code, string msg) => new(null, msg, code);
 
-        public async Task<AcceptResult> AcceptAsync(AcceptInviteRequest req, CancellationToken ct)
-        {
-            const string invalid = "This invitation link is invalid or has expired.";
-            var hash = Hash(req.Token);
-
-            var strategy = _db.Database.CreateExecutionStrategy();
-
-            return await strategy.ExecuteAsync<AcceptResult>(async () =>
-            {
-                _db.ChangeTracker.Clear();
-                var now = DateTimeOffset.UtcNow;
-
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-                var invite = await _db.AdminInvitations.FirstOrDefaultAsync(i =>
-                    i.TokenHash == hash && i.AcceptedAt == null && i.RevokedAt == null && i.ExpiresAt > now, ct);
-                if (invite is null) return new AcceptResult(false, invalid, 400);
-
-                var user = await _users.FindByIdAsync(invite.UserId);
-                if (user is null || !user.IsAdminUser || user.Status != AdminUserStatus.Pending)
-                    return new AcceptResult(false, invalid, 400);
-
-                var pw = await _users.AddPasswordAsync(user, req.Password);
-                if (!pw.Succeeded)
-                    return new AcceptResult(false, string.Join(" ", pw.Errors.Select(e => e.Description)), 400);
-
-                user.Status = AdminUserStatus.Active;
-                user.IsActive = true;
-                user.EmailConfirmed = true;
-                user.IsEmailVerified = true;
-                user.DateModified = now;
-                user.ModifiedBy = user.Id;
-                invite.AcceptedAt = now;
-
-                await _db.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
-
-                await _audit.LogAsync("InviteAccepted", user.Id, user.Id, "Accepted login invite", AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                                // here
-
-                return new AcceptResult(true, null, 200);
-            });
-        }
-
+    
         public async Task<AccessResult<AdminUserStatusDto>> DeactivateUserAsync(string adminId, string actingUserId, CancellationToken ct)
         {
 
@@ -922,6 +1418,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             return await GetUserDetailAsync(adminId, actingUserId, ct);   // refreshed page data
         }
+
+        public async Task<AcceptResult> AcceptAsync(Core.Models.Admin.AcceptInviteRequest req, CancellationToken ct)
+        {
+            const string invalid = "This invitation link is invalid or has expired.";
+            var hash = Hash(req.Token);
+
+            var strategy = _db.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync<AcceptResult>(async () =>
+            {
+                _db.ChangeTracker.Clear();
+                var now = DateTimeOffset.UtcNow;
+
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+                var invite = await _db.AdminInvitations.FirstOrDefaultAsync(i =>
+                    i.TokenHash == hash && i.AcceptedAt == null && i.RevokedAt == null && i.ExpiresAt > now, ct);
+                if (invite is null) return new AcceptResult(false, invalid, 400);
+
+                var user = await _users.FindByIdAsync(invite.UserId);
+                if (user is null || !user.IsAdminUser || user.Status != AdminUserStatus.Pending)
+                    return new AcceptResult(false, invalid, 400);
+
+                var pw = await _users.AddPasswordAsync(user, req.Password);
+                if (!pw.Succeeded)
+                    return new AcceptResult(false, string.Join(" ", pw.Errors.Select(e => e.Description)), 400);
+
+                user.Status = AdminUserStatus.Active;
+                user.IsActive = true;
+                user.EmailConfirmed = true;
+                user.IsEmailVerified = true;
+                user.DateModified = now;
+                user.ModifiedBy = user.Id;
+                invite.AcceptedAt = now;
+
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+
+                await _audit.LogAsync("InviteAccepted", user.Id, user.Id, "Accepted login invite", AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);                                // here
+
+                return new AcceptResult(true, null, 200);
+            });
+        }
+
     }
 
 

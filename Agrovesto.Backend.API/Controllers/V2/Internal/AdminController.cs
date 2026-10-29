@@ -66,50 +66,70 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// </summary>
         [HttpPost("auth/seed-super-admin")]
         [AllowAnonymous]
-        public async Task<IActionResult> SeedSuperAdmin([FromQuery] string businessCode)
+        public async Task<IActionResult> SeedSuperAdmin([FromBody] InviteAdminUserRequest req, CancellationToken ct)
         {
-            try
-            {
-                // If caller did not supply a model use a default seed (matches existing DB initializer defaults)
-                var seed = new UserModel
-                {
-                    Email = "reloarhub@maildrop.cc",
-                    Password = "Reloarhub144828@",
-                    PhoneNumber = "01126201565",
-                    UserType = "Agrovesto",
-                    FirstName = "Reloarhub Solutions",
-                    BusinessCode = businessCode
-                };
+            var result = await _adminUserManagementManager.InviteAsync(req, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
 
-                var result = await _onBoardingManager.RegisterAdmin(seed, "SystemAdmin");
+            if (result.Data is null)
+                return Failure(result.StatusCode, result.Error);
 
-                return result.status
-                    ? Ok(new Response<(UserModel model, bool status, string message)>
-                    {
-                        Code = ResponseCodes.Success,
-                        Succeeded = true,
-                        Message = result.message,
-                        Data = result
-                    })
-                    : BadRequest(new Response<string> { Succeeded = false, Message = result.message, Code = ResponseCodes.Failed });
-            }
-            catch (BaseException ex)
+            return Ok(new Response<InviteAdminUserResponse>()
             {
-                return StatusCode((int)ex.HttpStatusCode, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                // User is created either way. Tell the UI when only the email failed.
+                Message = result.Data.EmailSent
+                    ? ResponseMessages.Successful
+                    : "User created, but the invitation email could not be sent. Use Resend invitation.",
+                Data = result.Data
+            });
         }
+        //[HttpPost("auth/seed-super-admin")]
+        //[AllowAnonymous]
+        //public async Task<IActionResult> SeedSuperAdmin([FromQuery] string businessCode)
+        //{
+        //    try
+        //    {
+        //        // If caller did not supply a model use a default seed (matches existing DB initializer defaults)
+        //        var seed = new UserModel
+        //        {
+        //            Email = "reloarhub@maildrop.cc",
+        //            Password = "Reloarhub144828@",
+        //            PhoneNumber = "01126201565",
+        //            UserType = "Agrovesto",
+        //            FirstName = "Reloarhub Solutions",
+        //            BusinessCode = businessCode
+        //        };
+
+        //        var result = await _onBoardingManager.RegisterAdmin(seed, "SystemAdmin");
+
+        //        return result.status
+        //            ? Ok(new Response<(UserModel model, bool status, string message)>
+        //            {
+        //                Code = ResponseCodes.Success,
+        //                Succeeded = true,
+        //                Message = result.message,
+        //                Data = result
+        //            })
+        //            : BadRequest(new Response<string> { Succeeded = false, Message = result.message, Code = ResponseCodes.Failed });
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        return StatusCode((int)ex.HttpStatusCode, new Response<string>
+        //        {
+        //            Message = ex.ExceptionMessage,
+        //            Succeeded = false,
+        //        });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(500, new Response<string>
+        //        {
+        //            Message = ex.Message,
+        //            Succeeded = false,
+        //        });
+        //    }
+        //}
 
         #region settings
 
@@ -410,9 +430,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             });
         }
 
+        [AllowAnonymous]
         // POST api/admin/user/{adminId}/resend-invite
         [HttpPost("user/{adminId}/resend-invite")]
-        [HasPermission(Permissions.Users.Invite)]
+       // [HasPermission(Permissions.Users.Invite)]
         public async Task<IActionResult> Resend(string adminId, CancellationToken ct)
         {
             var result = await _adminUserManagementManager.ResendAsync(adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);

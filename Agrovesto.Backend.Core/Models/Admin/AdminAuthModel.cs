@@ -199,8 +199,8 @@ namespace Agrovesto.Backend.Core.Models.Admin
         [Required(ErrorMessage = "Last name is required."), StringLength(100)]
         public string LastName { get; set; } = default!;
 
-        [Required(ErrorMessage = "Phone number is required.")]
-        public string PhoneNumber { get; set; } = default!;
+       // [Required(ErrorMessage = "Phone number is required.")]
+        public string? PhoneNumber { get; set; } = default!;
 
         [Required(ErrorMessage = "Email address is required.")]
         [RegularExpression(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", ErrorMessage = "Please enter a valid email address.")]
@@ -210,7 +210,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public string RoleId { get; set; } = default!;
     }
 
-    public record InviteAdminUserResponse(string UserId, string AdminCode, string Status, bool EmailSent, DateTimeOffset ExpiresAt);
+    public record InviteAdminUserResponse(string UserId, string AdminCode, string Status, bool EmailSent, DateTimeOffset? ExpiresAt);
     public record AdminRoleOptionDto(string Id, string Name, string? Description);
     public record InviteResult(InviteAdminUserResponse? Data, string? Error, int StatusCode);
 
