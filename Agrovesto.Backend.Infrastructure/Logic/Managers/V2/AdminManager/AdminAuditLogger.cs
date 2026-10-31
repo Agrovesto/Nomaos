@@ -25,7 +25,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         public AdminAuditLogger(DataContext db,  ILogger<AdminAuditLogger> log, IClientInfoProvider clientInfoProvider)
         { _db = db;  _log = log; _clientInfoProvider = clientInfoProvider; }
 
-        public async Task LogAsync(string action, string? actorUserId, string? targetUserId, string? details = null, string? module =null, string? affectedRecord=null, CancellationToken ct = default)
+        public async Task LogAsync(string action, string? actorUserId, string? targetUserId,
+            string? details = null, string? module =null, string? affectedRecord=null, CancellationToken ct = default)
         {
             try
             {

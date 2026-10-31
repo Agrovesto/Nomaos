@@ -2,19 +2,21 @@
 using Agrovesto.Backend.Infrastructure.DB;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Agrovesto.Backend.Infrastructure.Entities.Common.Permissions;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 {
     public interface IAdminDashboardManager
     {
-        Task<DashboardDto> GetAsync(DashboardPeriod period, DateOnly? from, DateOnly? to, ChartGranularity chartGranularity , CancellationToken ct);
+        Task<DashboardDto> GetAsync(string userId, DashboardPeriod period, DateOnly? from, DateOnly? to, ChartGranularity chartGranularity , CancellationToken ct);
     }
 
 
@@ -23,15 +25,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         private readonly DataContext _db;
         private readonly TimeProvider _time;
         private readonly IConfiguration _config;
-
-        public AdminDashboardManager(DataContext db, TimeProvider time, IConfiguration config)
+        private readonly IAdminAuditLogger _audit;
+        public AdminDashboardManager(DataContext db, TimeProvider time, IConfiguration config, IAdminAuditLogger audit)
         {
             _db = db;
             _time = time;
             _config = config;
+            _audit = audit;
         }
 
-        public async Task<DashboardDto> GetAsync(
+        public async Task<DashboardDto> GetAsync(string userId,
             DashboardPeriod periodType, DateOnly? from, DateOnly? to, ChartGranularity chart, CancellationToken ct)
         {
             var utcNow = _time.GetUtcNow().UtcDateTime;
@@ -56,6 +59,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 farmers.NewInPeriod == 0 && agents.NewInPeriod == 0 && organizations.NewInPeriod == 0 &&
                 memberships.NewInPeriod == 0 && (providers?.NewInPeriod ?? 0) == 0 &&
                 registrations.Total == 0;
+
+
+
+            await _audit.LogAsync("ViewAdminDashboard", userId, userId, "Viewed Admin Dashboard ", 
+                AdminActiviLogModule.AdminPanel.Dashboard, $"Fields: 'farmers, agents, organizations, memberships, providers, leadingOrgs, topAgents, registrations'", ct);                                // here
 
             return new DashboardDto(
                 periodType,

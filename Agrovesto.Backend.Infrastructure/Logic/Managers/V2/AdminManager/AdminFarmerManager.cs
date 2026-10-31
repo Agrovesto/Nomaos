@@ -352,9 +352,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             farmer.FarmerStatus = FarmerStatus.Suspended;
             farmer.User.DateModified = DateTimeOffset.UtcNow;   // drives "Last Updated"
             farmer.User.ModifiedBy = actingUserId;
-            
 
+           
             await _context.SaveChangesAsync();
+
+            await _audit.LogAsync("SuspendFarmer", actingUserId, farmer.UserId, "Suspended Farmer",
+              AdminActiviLogModule.AdminPanel.Farmer);                                // here
+
+
             return true;
         }
         public async Task<bool> ReactivateFarmerAsync(long businessId, string farmerUserId, string actingUserId, string? reason)
@@ -375,6 +380,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             farmer.User.ModifiedBy = actingUserId;
 
             await _context.SaveChangesAsync();
+
+
+            await _audit.LogAsync("ReactivateFarmer", actingUserId, farmer.UserId, "Reactivated Farmer",
+               AdminActiviLogModule.AdminPanel.Farmer);
             return true;
         }
 
@@ -653,6 +662,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 createUser.model.LogDescription = $"Added Farmer {model.FirstName} {model.LastName}";
                 createUser.model.ActivityName = "New Farmer Added";
 
+       
+
                 // 5. Audit + credentials notification (non-critical)
                 await RunNonCriticalSteps(model, args, business, createUser.model, dateTime, ct);
 
@@ -914,7 +925,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             try
             {
                 await _audit.LogAsync("CreateFarmer", args.OnboardedByUserId, user.Id, JsonConvert.SerializeObject(model),
-                    AdminActiviLogModule.AdminPanel.UserMgt, $"{user.Email}", ct);
+                    AdminActiviLogModule.AdminPanel.Farmer, $"{user.Email}", ct);
                 await SendDefaultCredentialChange(user, args.businessCode);
             }
             catch (Exception ex)

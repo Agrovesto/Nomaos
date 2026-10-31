@@ -19,7 +19,7 @@ namespace Agrovesto.Backend.Core.Models.Admin
     public record ProfileImageDto(string ProfileImageUrl);
 
 
-    public record AdminPersonalInfoDto(
+    public record AdminPersonalInfoDto(string userId, string? adminCode,
     string? Gender, string? DateOfBirth,
     string? PhoneNumber, 
     //string? PhoneNumberDisplay,

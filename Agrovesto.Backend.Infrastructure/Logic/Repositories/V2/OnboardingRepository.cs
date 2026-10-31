@@ -176,8 +176,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return true;
         }
-        public async Task<AdminLoginResult> AdminLogin(
-            AdminLoginModel model, string? businessCode, string? ipAddress, string? userAgent)
+        public async Task<AdminLoginResult> 
+            AdminLogin(
+            AdminLoginModel model, string? businessCode,
+            string? ipAddress, 
+           string? userAgent
+            )
         {
             if (model is null || model.LoginMethod != LoginType.Password ||
                 string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Password))

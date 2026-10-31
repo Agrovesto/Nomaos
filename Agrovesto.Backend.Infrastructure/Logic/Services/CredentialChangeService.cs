@@ -46,7 +46,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             handler.ValidateNewValueFormat(model.NewValue);
 
-            var user = await handler.FindUserAsync(model);
+            var (user, message) = await handler.FindUserAsync(model);
 
             await handler.ChangeAsync(user, model.OldValue, model.NewValue);
 
@@ -61,18 +61,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             var handler = _handlers.SingleOrDefault(h => h.Type == model.Type)
                 ?? throw new BaseException(ExceptionType.BAD_REQUEST, "Unsupported credential type.");
 
-            var user = await handler.FindUserAsync(new ChangeCredentialModel
+            var (user, message) = await handler.FindUserAsync(new ChangeCredentialModel
             {
                 Email=model.Email,
                 PhoneNumber=model.PhoneNumber,
             });
+            
+            if(user == null)
+                return (true, message);
+
             var artifact = await handler.GenerateArtifactAsync(user, model);
 
             var env = _configuration["Official:Env"];
             if (env == Env.Live.ToString())
             {
                 await handler.DeliverLiveAsync(user, artifact, model);
-                return (true, "A reset code has been sent");
+                return (true, message);
             }
 
 
@@ -92,7 +96,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             handler.ValidateNewValueFormat(model.NewValue);
 
-            var user = await handler.FindUserAsync(new ChangeCredentialModel
+            var (user, message) = await handler.FindUserAsync(new ChangeCredentialModel
             {
                 Email = model.UserId,
                 PhoneNumber = model.PhoneNumber,

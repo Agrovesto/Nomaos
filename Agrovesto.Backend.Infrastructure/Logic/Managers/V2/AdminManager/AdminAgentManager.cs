@@ -1134,9 +1134,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             agent.AgentStatus = AgentStatus.Suspended;
             agent.User.DateModified = DateTimeOffset.UtcNow;   // drives "Last Updated"
             agent.User.ModifiedBy = actingUserId;
-
-
             await _context.SaveChangesAsync();
+
+            await _audit.LogAsync("SuspendAgent", actingUserId, agent.UserId, JsonConvert.SerializeObject(reason),
+                   AdminActiviLogModule.AdminPanel.Agent, $"{agent.User.Email}", CancellationToken.None);
             return true;
         }
         public async Task<bool> ReactivateAgentAsync(long businessId, string agentUserId, string actingUserId, string? reason)
@@ -1155,8 +1156,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             agent.AgentStatus = AgentStatus.Active;
             agent.User.DateModified = DateTimeOffset.UtcNow;   // drives "Last Updated"
             agent.User.ModifiedBy = actingUserId;
-
             await _context.SaveChangesAsync();
+
+            await _audit.LogAsync("ReactivateAgent", actingUserId, agent.UserId, JsonConvert.SerializeObject(reason),
+                   AdminActiviLogModule.AdminPanel.Agent, $"{agent.User.Email}", CancellationToken.None);
             return true;
         }
         public async Task<AgentOverviewResponse> GetAgentOverviewAsync(string agentUserId)

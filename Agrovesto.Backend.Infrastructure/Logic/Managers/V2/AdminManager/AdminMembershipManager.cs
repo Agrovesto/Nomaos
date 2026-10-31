@@ -34,6 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
     public interface IAdminMembershipManager
     {
         Task<(bool status, string msg, MemberShipListItemDto data)> CreateMembershipAsync(AdminCreateMembershipRequest model, AdminOnBoardingArgs args, CancellationToken ct);
+        Task<List<MemberShipListItemDto>> GetAllForExportAsync(MemberShipListQuery p);
         Task<MembershipAgentsResponse> GetMembershipAgentsAsync(long businessId, long membershipId);
         Task<InputFinanceResponse> GetMembershipInputFinanceAsync(long membershipId, int page, int pageSize);
         Task<MembershipMembersResponse> GetMembershipMembersAsync(long businessId, long membershipId, string? search, int pageNumber, int pageSize);
@@ -237,6 +238,68 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             }).ToList();
 
             return new PagedResult<MemberShipListItemDto>(items, page, size, total);
+        }
+        public async Task<List<MemberShipListItemDto>> GetAllForExportAsync(MemberShipListQuery p)
+        {
+            var page = Math.Max(p.PageNumber, 1);
+            var size = Math.Clamp(p.PageSize, 1, 100);
+
+            var q = ApplyFilters(MembershipsInBusiness(p.BusinessId), p);
+            var total = await q.CountAsync();
+
+            var rows = await q
+                .OrderByDescending(m => m.OnBoardedOn)
+                .ThenByDescending(m => m.Id)
+                .Skip((page - 1) * size)
+                .Take(size)
+                .Select(m => new
+                {
+                    m.Id,
+                    m.UserId,
+                    MemberShipName = m.Name,
+                    MemberShipType = m.MemberShipType.Name,
+                    m.State,
+                    m.OnBoardedOn,
+                    m.MembershipStatus,
+                    IsVerified = m.User.IsPhoneVerified && m.User.IsNinVerified
+                })
+                .ToListAsync();
+
+            var ids = rows.Select(r => r.Id).ToList();
+
+            var memberCounts = await _context.FarmerCooperatives
+                .Where(fc => ids.Contains(fc.CooperativeId))
+                .GroupBy(fc => fc.CooperativeId)
+                .Select(g => new
+                {
+                    CooperativeId = g.Key,
+                    Count = g.Select(x => x.FarmerId).Distinct().Count()
+                })
+                .ToDictionaryAsync(x => x.CooperativeId, x => x.Count);
+
+            var orgCounts = await _context.OrganizationMemberships
+                .Where(om => ids.Contains(om.MembershipId))
+                .GroupBy(om => om.MembershipId)
+                .Select(g => new
+                {
+                    MembershipId = g.Key,
+                    Count = g.Select(x => x.OrganizationId).Distinct().Count()
+                })
+                .ToDictionaryAsync(x => x.MembershipId, x => x.Count);
+
+            var items = rows.Select(r => new MemberShipListItemDto
+            {
+                Id = r.Id,
+                MemberShipLeaderId = r.UserId,
+                MemberShipName = r.MemberShipName,
+                MemberShipType = r.MemberShipType,
+                State = r.State,
+                Members = memberCounts.GetValueOrDefault(r.Id),
+                LinkedOrganizations = orgCounts.GetValueOrDefault(r.Id),
+                RegDate = r.OnBoardedOn,
+                Status = ResolveStatus(r.MembershipStatus, r.IsVerified)
+            }).ToList();
+            return items;
         }
 
         #region createmembership

@@ -5,11 +5,14 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using static Agrovesto.Backend.Infrastructure.Entities.Common.Permissions;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 {
@@ -31,14 +34,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         private readonly UserManager<User> _users;
         private readonly IAdminAuditLogger _audit;
         private const long MaxImageBytes = 2 * 1024 * 1024;
-        public AdminSettingsManager(IProfileImageStore images,DataContext context, UserManager<User> users, IAdminAuditLogger audit)
+        public AdminSettingsManager(IProfileImageStore images, DataContext context, UserManager<User> users, IAdminAuditLogger audit)
         {
             _context = context;
             _users = users;
             _audit = audit;
             _images = images;
         }
-      
+
 
         public async Task<AccessResult<ProfileImageDto>> UpdateProfileImageAsync(
             string userId, Stream file, long length, CancellationToken ct)
@@ -88,8 +91,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             }
 
             await _audit.LogAsync("ProfileImageChanged", user.Id, user.Id, "Changed Profile Image", AdminActiviLogModule.AdminPanel.Profile, $"{user.Email}", ct);                                // here
-
-
+        
             return AccessResult.Ok(new ProfileImageDto(_images.GetUrl(newKey)));
         }
 
@@ -105,7 +107,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 return (".webp", "image/webp");
             return null;
         }
-        public async Task<AccessResult<AdminProfileDto>> GetProfileAsync(string userId, CancellationToken ct)
+        public async Task<AccessResult<AdminProfileDto>> GetProfileAsync(string userId,
+            CancellationToken ct)
         {
             var u = await _context.Users.AsNoTracking()
                 .Where(x => x.Id == userId && x.IsAdminUser)
@@ -141,7 +144,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             var fullName = string.Join(" ", new[] { u.FirstName, u.MiddleName, u.LastName }
                 .Where(p => !string.IsNullOrWhiteSpace(p)));
             var level = roles.Count > 0 ? string.Join(", ", roles) : null;
+         
 
+
+            var accessDetails = JsonConvert.SerializeObject(new
+            {
+                action = "ViewLoggedInUserProfile",
+                accessedRecords = new[]
+                {
+                    new { entity = "UserNRoles", id = u.Id, count = roles.Count },
+                },
+                sectionsViewed = new[] { "Header", "WorkInfo", "PersonalInfo" },
+                isSelfView = true
+            });
+
+                        await _audit.LogAsync(
+                             "ViewLoggedInUserProfile",
+                              userId,          // actor
+                              u.Id,            // target
+                              accessDetails,
+                              AdminActiviLogModule.AdminPanel.Settings,
+                              $"{userId}",
+                              ct);
             return AccessResult.Ok(new AdminProfileDto(
                 u.Id, u.AdminCode ?? "", fullName,
                 string.IsNullOrEmpty(u.ProfileImageKey) ? null : _images.GetUrl(u.ProfileImageKey),
@@ -188,7 +212,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             user.ModifiedBy = user.Id;
             await _users.UpdateAsync(user);
 
-            await _audit.LogAsync("PasswordChanged", user.Id, user.Id, "Changed Password", AdminActiviLogModule.AdminPanel.Settings, $"{user.Email}", ct);                                // here
+            await _audit.LogAsync("PasswordChanged", userId, user.Id, "Changed Password", AdminActiviLogModule.AdminPanel.Settings, $"{user.Email}", ct);                                // here
 
 
             return AccessResult.Ok<object>(null!);
@@ -200,6 +224,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .Where(x => x.Id == userId && x.IsAdminUser)
                 .Select(x => new
                 {
+                    x.Id,
+                    x.AdminCode,
                     x.Gender,
                     x.DateOfBirth,
                     x.PhoneNumber,
@@ -207,16 +233,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                     x.AdminUserOfficeAddress,
                     x.AdminUserOfficeState,
                     x.AdminUserOfficeCity
-                 
+
                 })
                 .FirstOrDefaultAsync(ct);
 
             if (u is null)
                 return AccessResult.Fail<AdminPersonalInfoDto>(404, "User not found.");
 
+
+            var accessDetails = JsonConvert.SerializeObject(new
+            {
+                action = "ViewLoggedInUserProfile",
+                accessedRecords = new[]
+{
+        new { entity = "User", id = u.Id }
+    },
+                sectionsViewed = new[] { "Header", "WorkInfo", "PersonalInfo" },
+                isSelfView = true
+            });
+
+
+            await _audit.LogAsync(
+    "ViewLoggedInUserPersonalInformation",
+    userId,          // actor
+    u.Id,            // target
+    accessDetails,
+    AdminActiviLogModule.AdminPanel.Settings,
+    $"{userId}",
+    ct);
+
             return AccessResult.Ok(new AdminPersonalInfoDto(
+                u.Id, u.AdminCode ?? "",
                 u.Gender, u.DateOfBirth,
-                u.PhoneNumber, 
+                u.PhoneNumber,
                 //PhoneNumberHelper.FormatDisplay(u.PhoneNumber),
                 u.Email ?? "", u.AdminUserOfficeAddress, u.AdminUserOfficeState, u.AdminUserOfficeCity));
         }
@@ -241,7 +290,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             string dob = null;
             string gender = null;
 
-           
+
 
             var changed = new List<string>();
             void Track(string field, string? oldValue, string? newValue)
@@ -261,7 +310,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             if (!string.IsNullOrWhiteSpace(req.Gender))
             {
                 gender = req.Gender;
-               
+
                 Track("Gender", user.Gender, gender);
             }
 
@@ -281,7 +330,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
                 await _context.SaveChangesAsync(ct);          // single save, no manual transaction
 
-                
+
 
                 await _audit.LogAsync("PersonalInfoUpdated", user.Id, user.Id, "Changed Password", AdminActiviLogModule.AdminPanel.Profile, $"Fields: {string.Join(", ", changed)}", ct);                                // here
 

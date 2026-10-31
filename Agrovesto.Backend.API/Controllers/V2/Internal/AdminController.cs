@@ -312,11 +312,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 });
         }
+
         /// <summary>
         /// GET api/admin/dashboard?period=month
         /// GET api/admin/dashboard?period=custom&amp;from=2026-09-01&amp;to=2026-09-30
         /// period: today | week | month | quarter | year | custom
         /// </summary>
+        [Authorize]
         [HttpGet("dashboard")]
         [HasPermission(Permissions.Dashboard.View)]
         [ProducesResponseType(typeof(DashboardDto), StatusCodes.Status200OK)]
@@ -325,6 +327,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             CancellationToken ct)
         {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier); // use whatever BuildClaims sets for user id
             if (query.Period == DashboardPeriod.Custom)
             {
                 if (query.From is null || query.To is null)
@@ -337,7 +340,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     return BadRequest(new { error = "Custom range is too large." });
             }
 
-            var result = await _adminDashboardManager.GetAsync(query.Period, query.From, query.To, query.Chart, ct);
+            var result = await _adminDashboardManager.GetAsync(userId,query.Period, query.From, query.To, query.Chart, ct);
 
             return Ok(new Response<DashboardDto>()
             {
@@ -978,7 +981,21 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return Ok(new Response<PagedResult<MemberShipListItemDto>> { Succeeded = true, Data = data });
         }
 
-      
+        [HttpGet("membership/export")]
+        [HasPermission(Permissions.Memberships.View)]
+        public async Task<IActionResult> Export([FromQuery] MemberShipListQuery query, [FromQuery] string format = "csv")
+        {
+            query.BusinessId = RequireBusinessId();
+            var rows = await _membershipManager.GetAllForExportAsync(query);
+            var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmm");
+
+            return format.Equals("xlsx", StringComparison.OrdinalIgnoreCase)
+                ? File(MembershipExport.ToXlsx(rows),
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       $"memberships-{stamp}.xlsx")
+                : File(MembershipExport.ToCsv(rows), "text/csv", $"memberships-{stamp}.csv");
+        }
+
 
         [HttpGet("membership/summary")]
         [HasPermission(Permissions.Memberships.View)]

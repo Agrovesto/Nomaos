@@ -26,10 +26,14 @@ namespace Agrovesto.Backend.Core.Models.Admin
         [MaxLength(11, ErrorMessage = "Phone number cannot exceed 11 characters.")]
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
-        public string? Location { get; set; }
-        public string? State { get; set; }
-        public string? Lga { get; set; }
-        public string? Ward { get; set; }
+        [Required(ErrorMessage = "Location is required.")]
+        public string Location { get; set; }
+        [Required(ErrorMessage = "State is required.")]
+        public string State { get; set; }
+        [Required(ErrorMessage = "Lga is required.")]
+        public string Lga { get; set; }
+        [Required(ErrorMessage = "Ward is required.")]  
+        public string Ward { get; set; }
       
     }
 

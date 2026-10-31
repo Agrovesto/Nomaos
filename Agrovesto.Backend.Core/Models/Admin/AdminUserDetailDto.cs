@@ -40,6 +40,10 @@ namespace Agrovesto.Backend.Core.Models.Admin
             public const string UserMgt = "User Management";
             public const string Profile = "Profile";
             public const string Settings = "Settings";
+            public const string Farmer = "Farmer Management";
+            public const string Agent = "Agent Management";
+            public const string Membership = "Membership Management";
+            public const string Organization = "Organization Management";
         }
 
     }

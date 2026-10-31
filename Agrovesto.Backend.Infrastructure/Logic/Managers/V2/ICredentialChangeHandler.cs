@@ -13,7 +13,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         CredentialType Type { get; }
         string RequiredFieldMissingMessage { get; } // e.g. "Your current password is required."
 
-        Task<User> FindUserAsync(ChangeCredentialModel model);
+        Task<(User? user, string message)> FindUserAsync(ChangeCredentialModel model);
         void ValidateNewValueFormat(string newValue); // throws BaseException if invalid
         Task ChangeAsync(User user, string oldValue, string newValue); // verifies old, applies new, persists — throws BaseException on wrong old value
 

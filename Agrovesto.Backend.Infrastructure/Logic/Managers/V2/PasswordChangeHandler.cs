@@ -40,7 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public CredentialType Type => CredentialType.Password;
         public string RequiredFieldMissingMessage => "Your current password is required.";
 
-        public async Task<User> FindUserAsync(ChangeCredentialModel model)
+        public async Task<(User? user, string message)> FindUserAsync(ChangeCredentialModel model)
         {
             if (string.IsNullOrWhiteSpace(model.Email))
                 throw new BaseException(ExceptionType.OPERATION_FAILED,
@@ -51,9 +51,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                  user = await _userManager.FindByIdAsync(model.Email);
             if (user == null)
             {
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Reset password link has been sent to your registered email");
+                return (null, "Reset password link has been sent to your registered email");
+            
             }
-            return user;
+            return (user, "Reset password link has been sent to your registered email");
         }
 
         public void ValidateNewValueFormat(string newValue)

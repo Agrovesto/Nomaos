@@ -36,16 +36,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public CredentialType Type => CredentialType.Pin;
         public string RequiredFieldMissingMessage => "Your current PIN is required.";
 
-        public async Task<User> FindUserAsync(ChangeCredentialModel model)
+        public async Task<(User? user, string message)> FindUserAsync(ChangeCredentialModel model)
         {
             if (string.IsNullOrWhiteSpace(model.PhoneNumber))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Phone number is required.");
 
             var user = await _context.Users.FirstOrDefaultAsync(x => x.PhoneNumber == model.PhoneNumber);
             if (user == null)
-                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Reset pin has been sent to your registered phone number.");
+                return (null, "Reset pin has been sent to your registered phone number.");
 
-            return user;
+            return (user, "Reset pin has been sent to your registered phone number.");
         }
 
         public void ValidateNewValueFormat(string newValue)
